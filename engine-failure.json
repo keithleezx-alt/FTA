@@ -1,0 +1,118 @@
+{
+  "top": "mot",
+  "topText": "Engine failure",
+  "T": 1,
+  "ccf": {
+    "IMU": [
+      0.95,
+      0.05
+    ],
+    "GNSS": [
+      0.95,
+      0.05
+    ],
+    "Pump": [
+      1,
+      0
+    ]
+  },
+  "blocks": [
+    {
+      "id": "imua",
+      "name": "Fuel Pump 1",
+      "mode": "prob",
+      "v": 0.0000041,
+      "x": 68,
+      "y": 204,
+      "st": "Pump",
+      "ccf": ""
+    },
+    {
+      "id": "imub",
+      "name": "Fuel Pump 2",
+      "mode": "prob",
+      "v": 0.0000041,
+      "x": 79,
+      "y": 289,
+      "st": "Pump",
+      "ccf": ""
+    },
+    {
+      "id": "fc",
+      "name": "Fuel Tank Node",
+      "mode": "prob",
+      "v": 0.00019,
+      "x": 302,
+      "y": 106,
+      "st": "Node",
+      "ccf": ""
+    },
+    {
+      "id": "esc",
+      "name": "Engine Node",
+      "mode": "prob",
+      "v": 0.00019,
+      "x": 561,
+      "y": 90,
+      "st": "Engine",
+      "ccf": ""
+    },
+    {
+      "id": "mot",
+      "name": "Engine Core",
+      "mode": "prob",
+      "v": 0.00021,
+      "x": 768,
+      "y": 219,
+      "st": "Engine",
+      "ccf": ""
+    },
+    {
+      "id": "2i1ddr",
+      "name": "Fuel Pressure and Ignition",
+      "mode": "prob",
+      "v": 0.000002,
+      "x": 405,
+      "y": 269,
+      "st": "Igniter",
+      "ccf": ""
+    }
+  ],
+  "links": [
+    {
+      "id": "l5",
+      "from": "imua",
+      "to": "fc",
+      "flow": "Fuel",
+      "group": ""
+    },
+    {
+      "id": "l6",
+      "from": "imub",
+      "to": "fc",
+      "flow": "Fuel",
+      "group": ""
+    },
+    {
+      "id": "l9",
+      "from": "fc",
+      "to": "esc",
+      "flow": "Fuel",
+      "group": ""
+    },
+    {
+      "id": "l11",
+      "from": "esc",
+      "to": "mot",
+      "flow": "Power",
+      "group": ""
+    },
+    {
+      "id": "o8g51t",
+      "from": "2i1ddr",
+      "to": "mot",
+      "flow": "Ignite",
+      "group": ""
+    }
+  ]
+}

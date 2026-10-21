@@ -1,0 +1,673 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Fault Tree Workbench</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: engineering workbench — file bar, IBD canvas + inspector, generated fault tree full-width, analysis tables below */
+:root{
+  --bg:#eef0f2; --surface:#ffffff; --sunk:#e3e6ea; --ink:#16202b; --muted:#5b6774;
+  --line:#cdd3da; --line-strong:#8995a3; --accent:#b45309; --accent-soft:#fbead6;
+  --flow:#2f5d8a; --critical:#b42318; --critical-soft:#fde7e4; --scrim:rgba(14,19,24,.45);
+  --f-display:"IBM Plex Sans Condensed","Arial Narrow",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#12171d; --surface:#1a2129; --sunk:#0e1318; --ink:#e4e9ee; --muted:#93a0ad;
+  --line:#2c3743; --line-strong:#5a6877; --accent:#f0a24a; --accent-soft:#3a2a17;
+  --flow:#7fb0e0; --critical:#f2786b; --critical-soft:#3d1d1a; --scrim:rgba(0,0,0,.6); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#12171d; --surface:#1a2129; --sunk:#0e1318; --ink:#e4e9ee; --muted:#93a0ad;
+  --line:#2c3743; --line-strong:#5a6877; --accent:#f0a24a; --accent-soft:#3a2a17;
+  --flow:#7fb0e0; --critical:#f2786b; --critical-soft:#3d1d1a; --scrim:rgba(0,0,0,.6); color-scheme:dark}
+html,body{background:var(--bg);color:var(--ink)}
+body{font-family:var(--f-body);font-size:14px;line-height:1.45;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 40px}
+.wrap{max-width:1280px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+header{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:8px 20px}
+h1{font-family:var(--f-display);font-weight:600;font-size:26px;letter-spacing:.01em;margin:0;text-wrap:balance}
+h1 .arrow{color:var(--accent)}
+.sub{color:var(--muted);margin:2px 0 0;max-width:70ch}
+.tag{font-family:var(--f-mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--accent);border:1px solid var(--accent);padding:2px 7px;border-radius:3px;white-space:nowrap}
+h2{font-family:var(--f-display);font-weight:600;font-size:13px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin:0}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:6px;min-width:0}
+.panel-h{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;padding:10px 14px;border-bottom:1px solid var(--line)}
+.work{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:18px;align-items:start}
+@media (max-width:880px){.work{grid-template-columns:minmax(0,1fr)}}
+.toolbar{display:flex;flex-wrap:wrap;gap:6px}
+button{font:500 13px/1 var(--f-body);color:var(--ink);background:var(--surface);border:1px solid var(--line-strong);border-radius:4px;padding:8px 11px;cursor:pointer}
+button:hover{background:var(--sunk)}
+button.on{background:var(--accent);border-color:var(--accent);color:var(--surface)}
+button.danger{color:var(--critical);border-color:var(--critical)}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.filebar{display:flex;flex-wrap:wrap;align-items:center;gap:10px 22px;padding:10px 14px}
+.fgroup{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.flabel{font:600 11px var(--f-display);letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin-right:2px}
+#status{flex:1 1 200px;text-align:right;min-width:0}
+#status.err{color:var(--critical)}
+.hint{font-size:12.5px;color:var(--muted);padding:8px 14px;border-top:1px solid var(--line);display:flex;flex-wrap:wrap;gap:4px 18px}
+.hint b{color:var(--accent);font-weight:600}
+.legend{display:inline-flex;align-items:center;gap:6px}
+.scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+#ibd{display:block;width:100%;min-width:860px;height:auto;background:var(--sunk);
+  background-image:radial-gradient(var(--line) 1px,transparent 1px);background-size:20px 20px}
+.blk{cursor:grab;touch-action:none}
+.blk rect.body{fill:var(--surface);stroke:var(--line-strong);stroke-width:1.2}
+.blk.sel rect.body{stroke:var(--flow);stroke-width:2.4}
+.blk.pending rect.body{stroke:var(--accent);stroke-width:2.4;stroke-dasharray:5 3}
+.blk.top rect.body{stroke:var(--accent);stroke-width:2}
+.blk .name{font:600 13px var(--f-body);fill:var(--ink)}
+.blk .rate{font:11px var(--f-mono);fill:var(--muted)}
+.blk .stereo{font:10px var(--f-mono);fill:var(--muted)}
+.blk .toptag{font:600 9.5px var(--f-mono);fill:var(--surface);letter-spacing:.08em}
+.blk .toptagbg{fill:var(--accent)}
+.blk .ccftag{font:600 9.5px var(--f-mono);fill:var(--flow)}
+.port{fill:var(--surface);stroke:var(--line-strong);stroke-width:1.2}
+.link{fill:none;stroke:var(--flow);stroke-width:1.6}
+.link.grp{stroke-dasharray:6 4}
+.link.sel{stroke-width:3}
+.linkhit{fill:none;stroke:transparent;stroke-width:16;cursor:pointer}
+.lbl-bg{fill:var(--sunk);stroke:var(--line)}
+.lbl{font:10.5px var(--f-mono);fill:var(--flow)}
+#arrowhead path{fill:var(--flow)}
+.insp{display:flex;flex-direction:column}
+.sect{padding:12px 14px;display:flex;flex-direction:column;gap:10px;border-bottom:1px solid var(--line)}
+.sect:last-child{border-bottom:0}
+label.f{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted)}
+input,select{font:14px var(--f-body);color:var(--ink);background:var(--bg);border:1px solid var(--line-strong);border-radius:4px;padding:7px 9px;width:100%;box-sizing:border-box}
+input.mono{font-family:var(--f-mono)}
+input.bad{border-color:var(--critical)}
+.derived{font:12px var(--f-mono);color:var(--muted);margin:-4px 0 0}
+.note{font-size:12px;color:var(--muted);margin:0}
+.empty{color:var(--muted);font-size:13px;margin:0}
+.row{display:flex;gap:6px;flex-wrap:wrap}
+.ccfg{display:flex;flex-direction:column;gap:6px;padding-top:4px}
+.ccfh{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:baseline}
+.ccfh b{font:600 13px var(--f-mono);color:var(--flow)}
+.alphas{display:grid;grid-template-columns:repeat(auto-fill,minmax(70px,1fr));gap:6px}
+.alphas input{padding:6px 7px;font-size:13px}
+.qline{font:11.5px var(--f-mono);color:var(--muted);margin:0;line-height:1.6}
+.qline .w{color:var(--critical)}
+.readout{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:1px;background:var(--line)}
+.readout>div{background:var(--surface);padding:14px 16px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.readout .k{font-size:12px;color:var(--muted)}
+.readout .v{font:500 24px var(--f-mono);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.readout .v.top{color:var(--accent)}
+.readout .v.crit{color:var(--critical)}
+.readout .s{font-size:12px;color:var(--muted)}
+#ft{display:block}
+.ft-box{fill:var(--surface);stroke:var(--line-strong);stroke-width:1}
+.ft-box.top{stroke:var(--accent);stroke-width:2;fill:var(--accent-soft)}
+.ft-box.spf{stroke:var(--critical);stroke-width:1.6;fill:var(--critical-soft)}
+.ft-txt{font:11px var(--f-body);fill:var(--ink)}
+.ft-txt.b{font-weight:600}
+.ft-gate{fill:var(--surface);stroke:var(--ink);stroke-width:1.3}
+.ft-gname{font:600 8.5px var(--f-mono);fill:var(--ink)}
+.ft-basic{fill:var(--surface);stroke:var(--ink);stroke-width:1.3}
+.ft-basic.ccf{stroke:var(--flow);stroke-dasharray:3 2}
+.ft-basic.spf{stroke:var(--critical);fill:var(--critical-soft)}
+.ft-zero{opacity:.45}
+.ft-p{font:10px var(--f-mono);fill:var(--muted)}
+.ft-wire{fill:none;stroke:var(--line-strong);stroke-width:1.1}
+.ft-xfer{fill:var(--surface);stroke:var(--flow);stroke-width:1.3}
+.ft-xtxt{font:10px var(--f-mono);fill:var(--flow)}
+.cols{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:18px;align-items:start}
+@media (max-width:880px){.cols{grid-template-columns:minmax(0,1fr)}}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+th{font:600 11px var(--f-body);text-transform:uppercase;letter-spacing:.07em;color:var(--muted);text-align:left;padding:8px 12px;border-bottom:1px solid var(--line)}
+td{padding:8px 12px;border-bottom:1px solid var(--line);vertical-align:middle}
+tr:last-child td{border-bottom:0}
+td.num{font-family:var(--f-mono);font-size:12.5px;white-space:nowrap}
+.chip{display:inline-block;font:12px var(--f-mono);padding:2px 7px;border-radius:3px;background:var(--sunk);border:1px solid var(--line);margin:2px 3px 2px 0;white-space:nowrap}
+tr.spf .chip{background:var(--critical-soft);border-color:var(--critical);color:var(--critical)}
+tr.ccf .chip{border-style:dashed}
+.ord{font:600 11px var(--f-mono);color:var(--muted)}
+tr.spf .ord{color:var(--critical)}
+.bar{height:6px;background:var(--sunk);border-radius:3px;overflow:hidden;min-width:60px}
+.bar>i{display:block;height:100%;background:var(--accent)}
+tr.spf .bar>i{background:var(--critical)}
+.imp{display:flex;flex-direction:column;gap:10px;padding:12px 14px}
+.imp-row{display:grid;grid-template-columns:110px minmax(0,1fr) 52px;gap:10px;align-items:center;font-size:13px}
+.imp-row .n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.imp-row .num{font:12px var(--f-mono);text-align:right}
+.sheet{position:fixed;inset:0;background:var(--scrim);display:flex;align-items:center;justify-content:center;z-index:10;
+  padding:calc(16px + env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) calc(16px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+.sheet-card{background:var(--surface);border:1px solid var(--line);border-radius:6px;width:min(760px,100%);max-height:100%;display:flex;flex-direction:column;min-width:0}
+.sheet-card p{padding:10px 14px 0}
+#sheetText{flex:1;min-height:260px;margin:10px 14px 14px;font:12px/1.5 var(--f-mono);color:var(--ink);background:var(--bg);border:1px solid var(--line-strong);border-radius:4px;padding:10px;resize:vertical;width:auto}
+@media (prefers-reduced-motion:no-preference){.bar>i{transition:width .25s ease}}
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>IBD <span class="arrow">→</span> Fault Tree</h1>
+      <p class="sub">Draw the internal block diagram, give each block a failure rate or fixed probability, mark redundant inputs and common-cause groups, and pick the top event. The fault tree, minimal cut sets and top-event probability regenerate as you edit.</p>
+    </div>
+    <span class="tag">Example data · fake rates</span>
+  </header>
+
+  <section class="panel">
+    <div class="filebar">
+      <div class="fgroup"><span class="flabel">Project</span><button id="fLoad" type="button">Load file…</button><button id="fSave" type="button">Save .json</button></div>
+      <div class="fgroup"><span class="flabel">IBD</span><button id="fIbdSvg" type="button">SVG</button><button id="fSysml" type="button">SysML v2</button></div>
+      <div class="fgroup"><span class="flabel">Fault tree</span><button id="fFtSvg" type="button">SVG</button><button id="fOpsa" type="button">Open-PSA XML</button></div>
+      <span id="status" class="note" role="status"></span>
+    </div>
+    <input type="file" id="fileIn" accept=".json,.sysml,.txt,application/json,text/plain" hidden>
+  </section>
+
+  <div class="work">
+    <section class="panel">
+      <div class="panel-h">
+        <h2>Internal block diagram</h2>
+        <div class="toolbar">
+          <button id="btnAdd" type="button">+ Block</button>
+          <button id="btnConnect" type="button">Connect</button>
+          <button id="btnDel" type="button" class="danger">Delete</button>
+          <button id="btnReset" type="button">Reset example</button>
+        </div>
+      </div>
+      <div class="scroll">
+        <svg id="ibd" viewBox="0 0 1300 520" aria-label="Internal block diagram canvas">
+          <defs>
+            <marker id="arrowhead" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z"/></marker>
+          </defs>
+          <g id="ibdLinks"></g><g id="ibdBlocks"></g>
+        </svg>
+      </div>
+      <div class="hint" id="hint"></div>
+    </section>
+
+    <aside class="panel insp">
+      <div class="sect">
+        <h2>Top event</h2>
+        <label class="f">Undesired event<input id="topText" type="text"></label>
+        <label class="f">Occurs when this block's output is lost<select id="topSel"></select></label>
+        <label class="f">Mission time (hours)<input id="missionT" class="mono" type="text" inputmode="decimal"></label>
+        <p class="note">Blocks with a constant failure rate λ use P = 1 − e<sup>−λT</sup> over the mission time. Fixed-probability blocks ignore it.</p>
+      </div>
+      <div class="sect" id="insp"></div>
+      <div class="sect" id="ccfSect"></div>
+      <div class="sect">
+        <h2>Failure logic</h2>
+        <p class="note">A block's output is lost if the block itself fails, <b>or</b> any required input is lost, <b>or</b> a redundancy group is lost. A group is lost when at least k of its n inputs are lost (k = n by default). A block with probability 0 never fails on its own.</p>
+        <p class="note">Common-cause groups use the alpha-factor model: Q<sub>k</sub> = k / C(m−1, k−1) · α<sub>k</sub> / α<sub>t</sub> · Q<sub>t</sub>, with α<sub>t</sub> = Σ k·α<sub>k</sub>.</p>
+      </div>
+    </aside>
+  </div>
+
+  <section class="panel"><div class="readout" id="readout"></div></section>
+
+  <section class="panel">
+    <div class="panel-h"><h2>Generated fault tree</h2><span class="note">△ = transfer to a subtree drawn elsewhere · red = single-point failure · dashed = common cause</span></div>
+    <div class="scroll"><svg id="ft"></svg></div>
+  </section>
+
+  <div class="cols">
+    <section class="panel">
+      <div class="panel-h"><h2>Minimal cut sets</h2><span class="note" id="csCount"></span></div>
+      <div class="scroll"><table><thead><tr><th>Order</th><th>Events that together cause the top event</th><th>P</th><th>Share</th></tr></thead><tbody id="csBody"></tbody></table></div>
+    </section>
+    <section class="panel">
+      <div class="panel-h"><h2>Component importance</h2><span class="note">Fussell–Vesely</span></div>
+      <div class="imp" id="imp"></div>
+    </section>
+  </div>
+</div>
+
+<div class="sheet" id="sheet" hidden>
+  <div class="sheet-card" role="dialog" aria-labelledby="sheetTitle">
+    <div class="panel-h"><h2 id="sheetTitle">Export</h2><div class="toolbar"><button id="sheetCopy" type="button">Copy</button><button id="sheetClose" type="button">Close</button></div></div>
+    <p class="note" id="sheetNote"></p>
+    <textarea id="sheetText" readonly spellcheck="false"></textarea>
+  </div>
+</div>
+
+<script>
+const KEY='ft-workbench-v2';
+const W=128,H=54,CW=1300,CH=520;
+function example(){
+  const b=(id,name,v,x,y,st,ccf='')=>({id,name,mode:'rate',v,x,y,st,ccf});
+  const motors=[1,2,3,4,5,6].map(i=>b('m'+i,'Motor '+i,2e-5,885,12+(i-1)*83,'actuation'));
+  const thrust={id:'thrust',name:'Thrust',mode:'prob',v:0,x:1150,y:220,st:'function',ccf:''};
+  return {top:'thrust',topText:'Loss of thrust',T:1,ccf:{IMU:[0.95,0.05],GNSS:[0.95,0.05]},vote:{'thrust|Rotors':2},
+    blocks:[
+      b('bat','Battery',2e-5,10,220,'power'),
+      b('pdb','PDB',5e-6,185,220,'power'),
+      b('imua','IMU A',5e-5,360,40,'sensor','IMU'),
+      b('imub','IMU B',5e-5,360,130,'sensor','IMU'),
+      b('gpsa','GNSS A',1e-4,360,310,'sensor','GNSS'),
+      b('gpsb','GNSS B',1e-4,360,400,'sensor','GNSS'),
+      b('fc','Flight Ctrl',1e-5,535,220,'compute'),
+      b('esc','ESC 6-in-1',3e-5,710,220,'actuation'),
+      ...motors,thrust],
+    links:[
+      ...[1,2,3,4,5,6].flatMap(i=>[{id:'le'+i,from:'esc',to:'m'+i,flow:'3φ',group:''},{id:'lt'+i,from:'m'+i,to:'thrust',flow:'lift',group:'Rotors'}]),
+      {id:'l1',from:'bat',to:'pdb',flow:'28V',group:''},
+      {id:'l2',from:'pdb',to:'imua',flow:'5V',group:''},
+      {id:'l3',from:'pdb',to:'imub',flow:'5V',group:''},
+      {id:'l4',from:'pdb',to:'fc',flow:'5V',group:''},
+      {id:'l5',from:'imua',to:'fc',flow:'attitude',group:'IMU'},
+      {id:'l6',from:'imub',to:'fc',flow:'attitude',group:'IMU'},
+      {id:'l7',from:'gpsa',to:'fc',flow:'position',group:'GNSS'},
+      {id:'l8',from:'gpsb',to:'fc',flow:'position',group:'GNSS'},
+      {id:'l9',from:'fc',to:'esc',flow:'PWM cmd',group:''},
+      {id:'l10',from:'pdb',to:'esc',flow:'28V',group:''}]};
+}
+const vkey=(to,g)=>to+'|'+g;
+function groupSize(to,g){return S.links.filter(l=>l.to===to&&l.group===g).length}
+function voteK(to,g,n){const k=Math.round(+(S.vote||{})[vkey(to,g)]);return k>=1&&k<=n?k:n}
+function normalize(s){
+  if(!s||!Array.isArray(s.blocks)||!Array.isArray(s.links))throw new Error('missing blocks or links');
+  s.ccf=s.ccf&&typeof s.ccf==='object'?s.ccf:{};s.vote=s.vote&&typeof s.vote==='object'?s.vote:{};s.T=+s.T>0?+s.T:1;s.topText=String(s.topText||'');
+  for(const b of s.blocks){
+    if(!b.id)b.id=Math.random().toString(36).slice(2,8);
+    if(b.v==null){b.v=+b.p||0;b.mode='rate'}delete b.p;
+    b.mode=b.mode==='prob'?'prob':'rate';b.v=Math.max(0,+b.v||0);if(b.mode==='prob')b.v=Math.min(1,b.v);
+    b.x=+b.x||0;b.y=+b.y||0;b.name=String(b.name||'Block');b.st=String(b.st||'');b.ccf=String(b.ccf||'');}
+  const ids=new Set(s.blocks.map(b=>b.id));
+  s.links=s.links.filter(l=>ids.has(l.from)&&ids.has(l.to)).map(l=>({id:l.id||Math.random().toString(36).slice(2,8),from:l.from,to:l.to,flow:String(l.flow||''),group:String(l.group||'')}));
+  if(!ids.has(s.top))s.top=s.blocks[0]?.id;
+  return s;
+}
+let S,oldSave=false;
+try{const raw=JSON.parse(localStorage.getItem(KEY));oldSave=!!raw&&!raw.vote;S=normalize(raw)}catch(e){S=example()}
+let sel=null,connect=false,pending=null,drag=null;
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const uid=()=>Math.random().toString(36).slice(2,8);
+const fmt=p=>p>0?p.toExponential(2).replace('e-','e−'):'0';
+const mT=()=>S.T>0?S.T:1;
+const pb=b=>b.mode==='prob'?b.v:1-Math.exp(-b.v*mT());
+function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
+const byId=()=>Object.fromEntries(S.blocks.map(b=>[b.id,b]));
+function status(msg,err){const el=$('status');el.textContent=msg;el.classList.toggle('err',!!err)}
+
+/* ---------- IBD canvas ---------- */
+function bezier(a,b){
+  const sx=a.x+W,sy=a.y+H/2,tx=b.x,ty=b.y+H/2,dx=Math.max(40,Math.abs(tx-sx)/2);
+  const c1x=sx+dx,c2x=tx-dx,m=t=>{const u=1-t;return[u*u*u*sx+3*u*u*t*c1x+3*u*t*t*c2x+t*t*t*tx,u*u*u*sy+3*u*u*t*sy+3*u*t*t*ty+t*t*t*ty]};
+  return{d:`M${sx},${sy} C${c1x},${sy} ${c2x},${ty} ${tx-2},${ty}`,mid:m(.5),sx,sy,tx,ty};
+}
+function rateText(b){return b.mode==='prob'?(b.v>0?`P ${fmt(b.v)} fixed`:'P 0 · never fails'):`λ ${fmt(b.v)} /h`}
+function renderIBD(){
+  const m=byId();let L='';
+  for(const l of S.links){const a=m[l.from],b=m[l.to];if(!a||!b)continue;
+    let txt=l.flow;if(l.group){const n=groupSize(l.to,l.group),k=voteK(l.to,l.group,n);txt+=` ∥${l.group}`+(n>1&&k<n?` ${k}/${n}`:'')}
+    const g=bezier(a,b),w=txt.length*6.4+10;
+    const s=sel&&sel.t==='l'&&sel.id===l.id?' sel':'';
+    L+=`<g data-link="${l.id}"><path class="link${l.group?' grp':''}${s}" d="${g.d}" marker-end="url(#arrowhead)"/><path class="linkhit" d="${g.d}"/>`+
+      (txt?`<rect class="lbl-bg" x="${g.mid[0]-w/2}" y="${g.mid[1]-9}" width="${w}" height="17" rx="3"/><text class="lbl" x="${g.mid[0]}" y="${g.mid[1]+3.5}" text-anchor="middle">${esc(txt)}</text>`:'')+
+      `<rect class="port" x="${g.sx-4}" y="${g.sy-4}" width="8" height="8"/><rect class="port" x="${g.tx-4}" y="${g.ty-4}" width="8" height="8"/></g>`;}
+  $('ibdLinks').innerHTML=L;
+  let B='';
+  for(const b of S.blocks){
+    const cls=['blk'];if(sel&&sel.t==='b'&&sel.id===b.id)cls.push('sel');if(pending===b.id)cls.push('pending');if(S.top===b.id)cls.push('top');
+    B+=`<g class="${cls.join(' ')}" data-block="${b.id}" transform="translate(${b.x},${b.y})"><rect class="body" width="${W}" height="${H}" rx="4"/>`+
+      `<text class="stereo" x="8" y="13">«${esc(b.st||'part')}»</text><text class="name" x="8" y="30">${esc(b.name)}</text><text class="rate" x="8" y="46">${esc(rateText(b))}</text>`+
+      (b.ccf?`<text class="ccftag" x="${W-7}" y="13" text-anchor="end">CCF·${esc(b.ccf)}</text>`:'')+
+      (S.top===b.id?`<rect class="toptagbg" x="${W-34}" y="-8" width="34" height="15" rx="2"/><text class="toptag" x="${W-17}" y="3" text-anchor="middle">TOP</text>`:'')+`</g>`;}
+  $('ibdBlocks').innerHTML=B;
+  $('btnConnect').classList.toggle('on',connect);
+  $('hint').innerHTML=connect?(pending?`<b>Connect:</b> tap the target block that receives this flow`:`<b>Connect:</b> tap the source block`)
+    :`<span>Drag blocks to arrange. Tap a block or connection to edit it.</span><span class="legend"><svg width="26" height="6"><line x1="0" y1="3" x2="26" y2="3" stroke="var(--flow)" stroke-width="1.6"/></svg>required input</span><span class="legend"><svg width="26" height="6"><line x1="0" y1="3" x2="26" y2="3" stroke="var(--flow)" stroke-width="1.6" stroke-dasharray="6 4"/></svg>redundancy group</span>`;
+}
+const svg=$('ibd');
+function pt(e){const p=svg.createSVGPoint();p.x=e.clientX;p.y=e.clientY;return p.matrixTransform(svg.getScreenCTM().inverse())}
+svg.addEventListener('pointerdown',e=>{
+  const bg=e.target.closest('[data-block]'),lg=e.target.closest('[data-link]');
+  if(bg){const id=bg.dataset.block;
+    if(connect){
+      if(!pending)pending=id;
+      else if(pending!==id){
+        if(!S.links.some(l=>l.from===pending&&l.to===id))S.links.push({id:uid(),from:pending,to:id,flow:'signal',group:''});
+        sel={t:'l',id:S.links.at(-1).id};pending=null;connect=false;refresh(true);return;}
+      renderIBD();return;}
+    sel={t:'b',id};const b=byId()[id],p=pt(e);drag={id,ox:p.x-b.x,oy:p.y-b.y,moved:false};
+    svg.setPointerCapture(e.pointerId);renderIBD();renderInsp();return;}
+  if(lg&&!connect){sel={t:'l',id:lg.dataset.link};renderIBD();renderInsp();return;}
+  if(!connect){sel=null;renderIBD();renderInsp();}
+});
+svg.addEventListener('pointermove',e=>{if(!drag)return;const b=byId()[drag.id],p=pt(e);
+  b.x=Math.max(0,Math.min(CW-W,Math.round(p.x-drag.ox)));b.y=Math.max(8,Math.min(CH-H,Math.round(p.y-drag.oy)));drag.moved=true;renderIBD();});
+const end=()=>{if(drag&&drag.moved)save();drag=null};
+svg.addEventListener('pointerup',end);svg.addEventListener('pointercancel',end);
+
+/* ---------- inspector ---------- */
+function renderTop(){
+  $('topText').value=S.topText;$('missionT').value=S.T;
+  $('topSel').innerHTML=S.blocks.map(b=>`<option value="${b.id}"${b.id===S.top?' selected':''}>${esc(b.name)}</option>`).join('');
+}
+function derivedLine(b){return b.mode==='prob'?'Fixed per mission, independent of mission time':`P over ${mT()} h = ${fmt(pb(b))}`}
+function renderInsp(){
+  const el=$('insp'),m=byId();
+  if(sel&&sel.t==='b'&&m[sel.id]){const b=m[sel.id];
+    el.innerHTML=`<h2>Block</h2><label class="f">Name<input id="iName" type="text" value="${esc(b.name)}"></label>
+      <label class="f">Stereotype<input id="iSt" type="text" value="${esc(b.st||'')}"></label>
+      <label class="f">Failure model<select id="iMode"><option value="rate"${b.mode==='rate'?' selected':''}>Constant failure rate λ</option><option value="prob"${b.mode==='prob'?' selected':''}>Fixed probability</option></select></label>
+      <label class="f">${b.mode==='prob'?'Probability of failure (0 to 1)':'Failure rate λ (per hour, 0 or more)'}<input id="iV" class="mono" type="text" inputmode="decimal" value="${b.v}"></label>
+      <p class="derived" id="iDer">${esc(derivedLine(b))}</p>
+      <label class="f">Common-cause group<input id="iCcf" type="text" placeholder="e.g. IMU — empty = none" value="${esc(b.ccf||'')}"></label>
+      <div class="row"><button id="iTop" type="button">Set as top event</button><button id="iZero" type="button">Never fails (P = 0)</button></div>`;
+    $('iName').oninput=e=>{b.name=e.target.value;refresh(false);renderTop();renderCCF()};
+    $('iSt').oninput=e=>{b.st=e.target.value;refresh(false)};
+    $('iMode').onchange=e=>{const P=pb(b);b.mode=e.target.value;
+      b.v=b.mode==='prob'?+P.toPrecision(4):(P<1?+(-Math.log(1-P)/mT()).toPrecision(4):b.v);renderInsp();refresh(false)};
+    $('iV').oninput=e=>{const v=parseFloat(e.target.value.replace('−','-'));const ok=v>=0&&(b.mode==='rate'||v<=1)&&isFinite(v);
+      e.target.classList.toggle('bad',!ok);if(ok){b.v=v;$('iDer').textContent=derivedLine(b);refresh(false)}};
+    $('iZero').onclick=()=>{b.mode='prob';b.v=0;renderInsp();refresh(false)};
+    $('iCcf').oninput=e=>{b.ccf=e.target.value.trim();renderCCF();refresh(false)};
+    $('iTop').onclick=()=>{S.top=b.id;renderTop();refresh(false)};
+  }else if(sel&&sel.t==='l'&&S.links.find(l=>l.id===sel.id)){const l=S.links.find(l=>l.id===sel.id);
+    const n=l.group?groupSize(l.to,l.group):0;
+    el.innerHTML=`<h2>Connection · ${esc(m[l.from]?.name)} → ${esc(m[l.to]?.name)}</h2>
+      <label class="f">Flow (what passes through)<input id="iFlow" type="text" value="${esc(l.flow)}"></label>
+      <label class="f">Redundancy group<input id="iGrp" type="text" placeholder="empty = required input" value="${esc(l.group)}"></label>
+      ${n>1?`<label class="f">Group ${esc(l.group)} is lost when at least this many of its ${n} inputs are lost<input id="iK" class="mono" type="text" inputmode="numeric" value="${voteK(l.to,l.group,n)}"></label>
+      <p class="derived" id="iKd"></p>`:''}
+      <p class="note">Inputs into the same block that share a group name back each other up. By default the group is lost only when all of them are lost; set a lower number for k-of-n logic, such as 2 of 6 rotors.</p>`;
+    const kd=()=>{const d=$('iKd');if(!d)return;const k=voteK(l.to,l.group,n);
+      d.textContent=k===n?`AND: all ${n} must be lost`:k===1?'OR: any one lost is enough':`Voting: ${k} of ${n} lost`};kd();
+    $('iFlow').oninput=e=>{l.flow=e.target.value;refresh(false)};
+    $('iGrp').oninput=e=>{l.group=e.target.value.trim();refresh(false)};
+    $('iGrp').onchange=()=>renderInsp();
+    if($('iK'))$('iK').oninput=e=>{const v=+e.target.value;const ok=Number.isInteger(v)&&v>=1&&v<=n;e.target.classList.toggle('bad',!ok);
+      if(ok){S.vote[vkey(l.to,l.group)]=v;kd();refresh(false)}};
+  }else el.innerHTML=`<h2>Selection</h2><p class="empty">Tap a block to set its name, failure model and common-cause group, or a connection to set its flow and redundancy group.</p>`;
+}
+$('topText').oninput=e=>{S.topText=e.target.value;refresh(false)};
+$('topSel').onchange=e=>{S.top=e.target.value;refresh(false)};
+$('missionT').oninput=e=>{const v=parseFloat(e.target.value);const ok=v>0&&isFinite(v);e.target.classList.toggle('bad',!ok);
+  if(ok){S.T=v;const d=$('iDer'),b=sel&&sel.t==='b'&&byId()[sel.id];if(d&&b)d.textContent=derivedLine(b);refresh(false)}};
+$('btnAdd').onclick=()=>{const n=S.blocks.length,id=uid();
+  S.blocks.push({id,name:'Block '+(n+1),mode:'rate',v:1e-5,x:30+(n*23)%300,y:30+(n*17)%200,st:'part',ccf:''});sel={t:'b',id};connect=false;pending=null;refresh(true);};
+$('btnConnect').onclick=()=>{connect=!connect;pending=null;renderIBD()};
+$('btnDel').onclick=()=>{if(!sel)return;
+  if(sel.t==='b'){S.blocks=S.blocks.filter(b=>b.id!==sel.id);S.links=S.links.filter(l=>l.from!==sel.id&&l.to!==sel.id);if(S.top===sel.id)S.top=S.blocks[0]?.id;}
+  else S.links=S.links.filter(l=>l.id!==sel.id);
+  sel=null;refresh(true);};
+$('btnReset').onclick=()=>{S=example();sel=null;connect=false;pending=null;refresh(true);status('Example restored')};
+
+/* ---------- common cause (alpha factor) ---------- */
+function comb(n,k){let r=1;for(let i=1;i<=k;i++)r=r*(n-k+i)/i;return r}
+function defAlpha(m){const w=[];for(let k=2;k<=m;k++)w.push(1/(k-1));const s=w.reduce((a,b)=>a+b,0);return[0.95,...w.map(x=>+(0.05*x/s).toFixed(4))]}
+function groupsOf(){const g=new Map();for(const b of S.blocks){const c=(b.ccf||'').trim();if(!c)continue;if(!g.has(c))g.set(c,[]);g.get(c).push(b)}return g}
+function alphasFor(g,m){let a=S.ccf[g];if(!Array.isArray(a)||a.length!==m){a=defAlpha(m);S.ccf[g]=a}return a}
+function model(){
+  const m=byId(),ev={},ccfOf=new Map(),info={};
+  for(const b of S.blocks)ev[b.id]={name:b.name,p:pb(b)};
+  for(const[g,mem]of groupsOf()){const n=mem.length;if(n<2||n>6){info[g]={n,skip:true};continue}
+    const a=alphasFor(g,n),sum=a.reduce((s,x)=>s+(+x||0),0)||1,al=a.map(x=>(+x||0)/sum);
+    const at=al.reduce((s,x,i)=>s+(i+1)*x,0),Qt=mem.reduce((s,b)=>s+pb(b),0)/n;
+    const Q=k=>k/comb(n-1,k-1)*al[k-1]/at*Qt;
+    for(const b of mem)ev[b.id]={name:b.name+' (indep.)',p:al[0]/at*pb(b)};
+    const ids=mem.map(b=>b.id);
+    for(let mk=1;mk<(1<<n);mk++){const sub=ids.filter((_,i)=>(mk>>i)&1);if(sub.length<2)continue;
+      const id='ccf:'+g+':'+sub.join(',');
+      ev[id]={name:`CCF ${g}: ${sub.map(x=>m[x].name).join(' + ')}`,p:Q(sub.length),ccf:true};
+      for(const x of sub){if(!ccfOf.has(x))ccfOf.set(x,[]);ccfOf.get(x).push(id)}}
+    info[g]={n,Q:al.map((_,i)=>Q(i+1)),Qt,sum};}
+  return{ev,ccfOf,info};
+}
+
+/* ---------- analysis ---------- */
+function inputsOf(){const m=new Map();for(const l of S.links){if(!m.has(l.to))m.set(l.to,[]);m.get(l.to).push(l)}return m}
+function minimize(sets){
+  const seen=new Set(),u=[];for(const s of sets){const k=s.join('|');if(!seen.has(k)){seen.add(k);u.push(s)}}
+  u.sort((a,b)=>a.length-b.length);const keep=[];
+  for(const s of u){const ss=new Set(s);if(!keep.some(k=>k.every(x=>ss.has(x))))keep.push(s)}return keep;
+}
+function andProd(lists){let prod=[[]];
+  for(const c of lists){if(!c.length)return[];const np=[];
+    outer:for(const a of prod)for(const b of c){np.push([...new Set(a.concat(b))].sort());if(np.length>6000)break outer}
+    prod=minimize(np)}
+  return prod}
+function kSubsets(n,k){const r=[];(function go(s,a){if(a.length===k){r.push(a.slice());return}for(let i=s;i<n;i++){a.push(i);go(i+1,a);a.pop()}})(0,[]);return r}
+function analyze(){
+  const M=model(),ev=M.ev,m=byId(),ins=inputsOf(),memo=new Map(),stack=new Set();
+  function cs(id){
+    if(memo.has(id))return memo.get(id);if(stack.has(id)||!m[id])return[];stack.add(id);
+    let sets=[[id],...(M.ccfOf.get(id)||[]).map(e=>[e])].filter(s=>ev[s[0]].p>0);const groups=new Map();
+    for(const l of ins.get(id)||[]){if(!m[l.from])continue;
+      if(!l.group)sets=sets.concat(cs(l.from));else{if(!groups.has(l.group))groups.set(l.group,[]);groups.get(l.group).push(l.from)}}
+    for(const[g,mem]of groups){const lists=mem.map(cs),k=voteK(id,g,mem.length);
+      for(const sub of kSubsets(lists.length,k))sets=sets.concat(andProd(sub.map(i=>lists[i])));
+      sets=minimize(sets)}
+    stack.delete(id);const r=minimize(sets);memo.set(id,r);return r;
+  }
+  const cuts=S.top?cs(S.top):[];
+  const cp=c=>c.reduce((p,id)=>p*ev[id].p,1);
+  const rows=cuts.map(c=>({c,p:cp(c)})).sort((a,b)=>b.p-a.p);
+  const sum=rows.reduce((s,r)=>s+r.p,0);
+  const evs=[...new Set(cuts.flat())];let P=Math.min(1,sum),exact=false;
+  if(evs.length&&evs.length<=18){const idx=Object.fromEntries(evs.map((e,i)=>[e,i])),q=evs.map(e=>ev[e].p);
+    const masks=cuts.map(c=>c.reduce((mk,e)=>mk|(1<<idx[e]),0));P=0;
+    for(let st=0;st<(1<<evs.length);st++){if(!masks.some(mk=>(st&mk)===mk))continue;let p=1;for(let i=0;i<evs.length;i++)p*=(st>>i)&1?q[i]:1-q[i];P+=p}exact=true}
+  if(!evs.length){P=0;exact=true}
+  const imp=evs.map(e=>({e,v:sum?rows.filter(r=>r.c.includes(e)).reduce((s,r)=>s+r.p,0)/sum:0})).sort((a,b)=>b.v-a.v);
+  const spf=new Set(cuts.filter(c=>c.length===1).flat());
+  return{rows,sum,P,exact,imp,spf,ev,M};
+}
+
+/* ---------- fault tree drawing ---------- */
+function buildTree(M){
+  const m=byId(),ins=inputsOf(),drawn=new Set();
+  function internal(b,label){
+    const cc=M.ccfOf.get(b.id)||[];
+    const bn={k:'basic',id:b.id,label:cc.length?b.name+' independent failure':label,p:M.ev[b.id].p};
+    if(!cc.length)return bn;
+    return{k:'gate',g:'OR',label,ch:[bn,...cc.map(e=>({k:'basic',id:e,label:M.ev[e].name,p:M.ev[e].p,ccf:true}))]};
+  }
+  function node(id,stack,isTop){
+    const b=m[id];if(!b)return null;const inp=(ins.get(id)||[]).filter(l=>m[l.from]);
+    if(!inp.length&&!isTop)return internal(b,b.name+' fails');
+    if(stack.has(id))return null;
+    if(drawn.has(id))return{k:'xfer',label:b.name+' output lost'};
+    drawn.add(id);const st=new Set(stack).add(id);
+    const ch=[internal(b,b.name+' internal failure')],groups=new Map();
+    for(const l of inp){if(!l.group){const n=node(l.from,st);if(n)ch.push(n)}else{if(!groups.has(l.group))groups.set(l.group,[]);groups.get(l.group).push(l.from)}}
+    for(const[g,mem]of groups){const c=mem.map(f=>node(f,st)).filter(Boolean),n=mem.length,vk=voteK(id,g,n);
+      if(!c.length)continue;
+      if(c.length===1)ch.push(c[0]);
+      else if(vk>=n)ch.push({k:'gate',g:'AND',label:`All ${g} sources lost`,ch:c});
+      else if(vk===1)ch.push({k:'gate',g:'OR',label:`Any ${g} source lost`,ch:c});
+      else ch.push({k:'gate',g:'VOTE',vk,vn:n,label:`${vk} or more of ${n} ${g} lost`,ch:c});}
+    return{k:'gate',g:'OR',label:isTop?(S.topText||b.name+' output lost'):b.name+' output lost',ch,top:isTop};
+  }
+  return S.top?node(S.top,new Set(),true):null;
+}
+function wrap(t,n){const w=t.split(/\s+/),L=[];let c='';for(const x of w){if((c+' '+x).trim().length>n&&c){L.push(c);c=x}else c=(c+' '+x).trim()}if(c)L.push(c);
+  if(L.length>2){L.length=2;L[1]=L[1].slice(0,n-1)+'…'}return L}
+function drawTree(spf,M){
+  const root=buildTree(M),ft=$('ft');
+  if(!root){ft.setAttribute('viewBox','0 0 300 60');ft.setAttribute('width',300);ft.setAttribute('height',60);ft.innerHTML=`<text class="ft-txt" x="16" y="34">Add a block and choose a top event.</text>`;return}
+  const NW=136,LH=112,PAD=16;let leaf=0,maxD=0;
+  (function lay(n,d){n.d=d;maxD=Math.max(maxD,d);if(n.k==='gate'){n.ch.forEach(c=>lay(c,d+1));n.x=(n.ch[0].x+n.ch.at(-1).x)/2}else n.x=leaf++})(root,0);
+  const Wd=leaf*NW+PAD*2,Hd=(maxD+1)*LH+PAD;let o='';
+  const cx=n=>PAD+n.x*NW+NW/2,cy=n=>PAD+n.d*LH;
+  (function dr(n){const x=cx(n),y=cy(n),bw=NW-14,s=n.k==='basic'&&spf.has(n.id),z=n.k==='basic'&&!(n.p>0);
+    const lines=wrap(n.label,20);
+    o+=`<g${z?' class="ft-zero"':''}><rect class="ft-box${n.top?' top':''}${s?' spf':''}" x="${x-bw/2}" y="${y}" width="${bw}" height="38" rx="3"/>`;
+    lines.forEach((t,i)=>o+=`<text class="ft-txt${n.top?' b':''}" x="${x}" y="${y+(lines.length===1?23:16+i*13)}" text-anchor="middle">${esc(t)}</text>`);
+    const y0=y+42;o+=`<line class="ft-wire" x1="${x}" y1="${y+38}" x2="${x}" y2="${y0}"/>`;
+    if(n.k==='gate'){
+      o+=n.g!=='AND'?`<path class="ft-gate" d="M${x-15},${y0+24} Q${x-15},${y0+7} ${x},${y0} Q${x+15},${y0+7} ${x+15},${y0+24} Q${x},${y0+16} ${x-15},${y0+24}Z"/>`
+        :`<path class="ft-gate" d="M${x-14},${y0+24} L${x-14},${y0+11} A14 11 0 0 1 ${x+14},${y0+11} L${x+14},${y0+24}Z"/>`;
+      o+=`<text class="ft-gname" x="${x}" y="${y0+19}" text-anchor="middle">${n.g==='VOTE'?n.vk+'/'+n.vn:n.g}</text></g>`;
+      const yb=n.g!=='AND'?y0+20:y0+24,ym=y+LH-14;
+      for(const c of n.ch){const xc=cx(c);o+=`<path class="ft-wire" d="M${x},${yb} V${ym} H${xc} V${cy(c)}"/>`;dr(c)}
+    }else if(n.k==='basic'){
+      o+=`<circle class="ft-basic${n.ccf?' ccf':''}${s?' spf':''}" cx="${x}" cy="${y0+12}" r="12"/><text class="ft-p" x="${x}" y="${y0+40}" text-anchor="middle">${fmt(n.p)}</text></g>`;
+    }else{
+      o+=`<path class="ft-xfer" d="M${x},${y0} L${x+14},${y0+24} L${x-14},${y0+24}Z"/><text class="ft-xtxt" x="${x}" y="${y0+40}" text-anchor="middle">see above</text></g>`;
+    }})(root);
+  ft.setAttribute('viewBox',`0 0 ${Wd} ${Hd}`);ft.setAttribute('width',Wd);ft.setAttribute('height',Hd);ft.innerHTML=o;
+}
+
+/* ---------- results ---------- */
+function renderResults(){
+  const A=analyze(),m=A.ev;
+  const oneIn=A.P>0?Math.round(1/A.P).toLocaleString():'—';
+  $('readout').innerHTML=`<div><span class="k">P(${esc(S.topText||'top event')})</span><span class="v top">${fmt(A.P)}</span><span class="s">per ${mT()} h mission · ${A.exact?'exact':'rare-event approx.'}</span></div>
+    <div><span class="k">Occurs about once in</span><span class="v">${oneIn}</span><span class="s">missions (1 / P)</span></div>
+    <div><span class="k">Minimal cut sets</span><span class="v">${A.rows.length}</span><span class="s">smallest failure combinations</span></div>
+    <div><span class="k">Single-point failures</span><span class="v${A.spf.size?' crit':''}">${A.spf.size}</span><span class="s">${A.spf.size?[...A.spf].map(e=>esc(m[e].name)).join(', '):'none'}</span></div>`;
+  $('csCount').textContent=`${A.rows.length} sets · sum ${fmt(A.sum)}`;
+  $('csBody').innerHTML=A.rows.map(r=>{const sh=A.sum?r.p/A.sum:0;
+    const one=r.c.length===1,cc=one&&m[r.c[0]].ccf;
+    return`<tr class="${one?'spf':''}${cc?' ccf':''}"><td><span class="ord">${one?(cc?'CCF':'SPF'):'×'+r.c.length}</span></td><td>${r.c.map(e=>`<span class="chip">${esc(m[e].name)}</span>`).join('')}</td><td class="num">${fmt(r.p)}</td><td><div class="bar"><i style="width:${(sh*100).toFixed(1)}%"></i></div></td></tr>`}).join('')||`<tr><td colspan="4" class="empty">No cut sets: the top event cannot occur with the current data.</td></tr>`;
+  $('imp').innerHTML=A.imp.map(i=>`<div class="imp-row"><span class="n">${esc(m[i.e].name)}</span><div class="bar"><i style="width:${(i.v*100).toFixed(1)}%"></i></div><span class="num">${(i.v*100).toFixed(1)}%</span></div>`).join('')||`<p class="empty">Nothing to rank.</p>`;
+  document.querySelectorAll('[data-gq]').forEach(el=>{const i=A.M.info[el.dataset.gq];if(!i||i.skip){el.textContent='';return}
+    el.innerHTML=`Q<sub>t</sub> ${fmt(i.Qt)} · `+i.Q.map((q,k)=>`Q<sub>${k+1}</sub> ${fmt(q)}`).join(' · ')+
+      (Math.abs(i.sum-1)>1e-6?`<br><span class="w">α values sum to ${i.sum.toFixed(3)}; normalised to 1</span>`:'');});
+  drawTree(A.spf,A.M);
+}
+function renderCCF(){
+  const G=groupsOf();let h='<h2>Common-cause groups · alpha factor</h2>',gi=0;
+  if(!G.size)h+='<p class="empty">Give two or more similar blocks the same common-cause group name to model shared failures.</p>';
+  for(const[g,mem]of G){const n=mem.length;gi++;
+    h+=`<div class="ccfg"><div class="ccfh"><b>${esc(g)}</b><span class="note">${mem.map(b=>esc(b.name)).join(', ')}</span></div>`;
+    if(n<2){h+='<p class="note">Needs at least 2 members.</p></div>';continue}
+    if(n>6){h+='<p class="note">Limited to 6 members.</p></div>';continue}
+    const a=alphasFor(g,n);
+    h+='<div class="alphas">'+a.map((v,i)=>`<label class="f">α<sub>${i+1}</sub><input class="mono" type="text" inputmode="decimal" id="al-${gi}-${i}" data-g="${esc(g)}" data-k="${i}" value="${v}"></label>`).join('')+
+      `</div><p class="qline" data-gq="${esc(g)}"></p></div>`;}
+  if(G.size)h+='<p class="note">α<sub>k</sub> is the fraction of failures that hit exactly k members at once. Q<sub>k</sub> is the probability of each specific k-member event.</p>';
+  $('ccfSect').innerHTML=h;
+}
+$('ccfSect').addEventListener('input',e=>{const t=e.target;if(t.dataset.g==null)return;
+  const v=parseFloat(t.value),ok=v>=0&&v<=1;t.classList.toggle('bad',!ok);if(!ok)return;
+  S.ccf[t.dataset.g][+t.dataset.k]=v;refresh(false)});
+
+/* ---------- export ---------- */
+const EXPORT_CSS=`text{font-family:"IBM Plex Sans",Arial,sans-serif}
+.blk rect.body{fill:#fff;stroke:#8995a3;stroke-width:1.2}.blk.top rect.body{stroke:#b45309;stroke-width:2}
+.blk .name{font:600 13px "IBM Plex Sans",Arial,sans-serif;fill:#16202b}.blk .rate,.blk .stereo{font:10.5px "IBM Plex Mono",Menlo,monospace;fill:#5b6774}
+.blk .toptag{font:600 9.5px "IBM Plex Mono",Menlo,monospace;fill:#fff}.blk .toptagbg{fill:#b45309}.blk .ccftag{font:600 9.5px "IBM Plex Mono",Menlo,monospace;fill:#2f5d8a}
+.port{fill:#fff;stroke:#8995a3;stroke-width:1.2}.link{fill:none;stroke:#2f5d8a;stroke-width:1.6}.link.grp{stroke-dasharray:6 4}.linkhit{display:none}
+.lbl-bg{fill:#eef0f2;stroke:#cdd3da}.lbl{font:10.5px "IBM Plex Mono",Menlo,monospace;fill:#2f5d8a}#arrowhead path{fill:#2f5d8a}
+.ft-box{fill:#fff;stroke:#8995a3;stroke-width:1}.ft-box.top{stroke:#b45309;stroke-width:2;fill:#fbead6}.ft-box.spf{stroke:#b42318;stroke-width:1.6;fill:#fde7e4}
+.ft-txt{font:11px "IBM Plex Sans",Arial,sans-serif;fill:#16202b}.ft-txt.b{font-weight:600}.ft-gate,.ft-basic{fill:#fff;stroke:#16202b;stroke-width:1.3}
+.ft-gname{font:600 8.5px "IBM Plex Mono",Menlo,monospace;fill:#16202b}.ft-basic.ccf{stroke:#2f5d8a;stroke-dasharray:3 2}.ft-basic.spf{stroke:#b42318;fill:#fde7e4}
+.ft-zero{opacity:.45}.ft-p{font:10px "IBM Plex Mono",Menlo,monospace;fill:#5b6774}.ft-wire{fill:none;stroke:#8995a3;stroke-width:1.1}
+.ft-xfer{fill:#fff;stroke:#2f5d8a;stroke-width:1.3}.ft-xtxt{font:10px "IBM Plex Mono",Menlo,monospace;fill:#2f5d8a}`;
+function svgExport(el,w,h){
+  const c=el.cloneNode(true);c.removeAttribute('id');c.removeAttribute('style');c.setAttribute('xmlns','http://www.w3.org/2000/svg');
+  c.setAttribute('width',w);c.setAttribute('height',h);
+  c.querySelectorAll('.sel,.pending').forEach(n=>n.classList.remove('sel','pending'));
+  const NS='http://www.w3.org/2000/svg',st=document.createElementNS(NS,'style');st.textContent=EXPORT_CSS;
+  const bg=document.createElementNS(NS,'rect');const vb=(c.getAttribute('viewBox')||`0 0 ${w} ${h}`).split(/\s+/);
+  bg.setAttribute('x',vb[0]);bg.setAttribute('y',vb[1]);bg.setAttribute('width',vb[2]);bg.setAttribute('height',vb[3]);bg.setAttribute('fill','#ffffff');
+  c.insertBefore(bg,c.firstChild);c.insertBefore(st,c.firstChild);
+  return'<?xml version="1.0" encoding="UTF-8"?>\n'+new XMLSerializer().serializeToString(c);
+}
+function ibdSvg(){
+  const xs=S.blocks.map(b=>b.x+W),ys=S.blocks.map(b=>b.y+H);
+  const w=Math.max(400,...xs)+24,h=Math.max(200,...ys)+24;
+  const c=$('ibd').cloneNode(true);c.setAttribute('viewBox',`0 -12 ${w} ${h+12}`);
+  return svgExport(c,w,h+12);
+}
+function ftSvg(){const f=$('ft');return svgExport(f,f.getAttribute('width'),f.getAttribute('height'))}
+const b64e=s=>btoa(unescape(encodeURIComponent(s))),b64d=s=>decodeURIComponent(escape(atob(s)));
+function ident(s,used){let x=String(s).replace(/[^A-Za-z0-9_]/g,'_').replace(/_+/g,'_').replace(/^_|_$/g,'')||'X';if(/^[0-9]/.test(x))x='_'+x;let y=x,i=2;while(used.has(y))y=x+'_'+i++;used.add(y);return y}
+const real=v=>v>0?v.toExponential(4).toUpperCase().replace('E+0','E0'):'0.0';
+const sstr=s=>'"'+String(s).replace(/\\/g,'\\\\').replace(/"/g,'\\"')+'"';
+function toSysML(){
+  const m=byId(),used=new Set(['Real','String','FTW_Model']),inst=new Set(),defN={},instN={},flowN={},port={};
+  const L=[];
+  for(const l of S.links){const f=l.flow||'signal';if(!flowN[f])flowN[f]=ident('F_'+f,used)}
+  for(const b of S.blocks){defN[b.id]=ident(b.name.replace(/\s+(\w)/g,(_,c)=>c.toUpperCase()).replace(/^\w/,c=>c.toUpperCase()),used);
+    instN[b.id]=ident(defN[b.id].replace(/^[A-Z]+(?=[A-Z][a-z]|$)|^[A-Z]/,c=>c.toLowerCase()),inst);port[b.id]=[]}
+  S.links.forEach((l,i)=>{const f=flowN[l.flow||'signal'];port[l.from].push(`port o${i+1} : P_${f};`);port[l.to].push(`port i${i+1} : ~P_${f};`)});
+  L.push(`/* Generated by Fault Tree Workbench. Layout data for reloading: ft-layout:${b64e(JSON.stringify(S))} */`);
+  L.push('package FTW_Model {','  private import ScalarValues::*;','');
+  L.push(`  doc /* Top event: ${String(S.topText).replace(/\*\//g,'')} (loss of ${m[S.top]?.name||'?'} output). Mission time ${S.T} h. */`,'');
+  for(const[f,n]of Object.entries(flowN)){L.push(`  item def ${n};   // flow: ${f}`,`  port def P_${n} { out item payload : ${n}; }`)}
+  L.push('');
+  for(const b of S.blocks){
+    L.push(`  part def ${defN[b.id]} {   // «${b.st||'part'}»`);
+    L.push(b.mode==='prob'?`    attribute fixedFailureProbability : Real = ${real(b.v)};`:`    attribute failureRate : Real = ${real(b.v)};   // per hour`);
+    if(b.ccf)L.push(`    attribute commonCauseGroup : String = ${sstr(b.ccf)};`);
+    for(const g of new Set(S.links.filter(l=>l.to===b.id&&l.group).map(l=>l.group))){const n=groupSize(b.id,g),k=voteK(b.id,g,n);
+      if(n>1&&k<n)L.push(`    attribute lossThreshold_${String(g).replace(/[^A-Za-z0-9_]/g,'_')} : Integer = ${k};   // group ${g.replace(/\*\//g,'')} lost when ${k} of ${n} inputs lost`);}
+    for(const p of port[b.id])L.push('    '+p);
+    L.push('  }');}
+  L.push('','  part system {',`    attribute missionTime : Real = ${real(S.T)};   // hours`);
+  for(const b of S.blocks)L.push(`    part ${instN[b.id]} : ${defN[b.id]};`);
+  S.links.forEach((l,i)=>{const c=`connect ${instN[l.from]}.o${i+1} to ${instN[l.to]}.i${i+1}`;
+    L.push(l.group?`    connection c${i+1} ${c} {\n      attribute redundancyGroup : String = ${sstr(l.group)};\n    }`:`    connection c${i+1} ${c};`)});
+  for(const[g,a]of Object.entries(S.ccf))if(groupsOf().has(g))L.push(`    // CCF group ${g}: alpha = [${a.join(', ')}]`);
+  L.push('  }','}');
+  return L.join('\n')+'\n';
+}
+function toOpenPSA(){
+  const M=model(),m=byId(),ins=inputsOf(),stack=new Set(),done=new Set(),gates=[],usedEv=new Set();
+  const x=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const used=new Set(),gN={},eN={};
+  const gname=id=>gN[id]||(gN[id]=ident('G_'+m[id].name+'_lost',used));
+  const ename=id=>eN[id]||(eN[id]=ident('E_'+M.ev[id].name.replace('CCF ','CCF_'),used));
+  const beRef=id=>{usedEv.add(id);return`<basic-event name="${ename(id)}"/>`};
+  function gate(id){
+    if(done.has(id))return true;if(stack.has(id))return false;stack.add(id);
+    const args=[beRef(id),...(M.ccfOf.get(id)||[]).map(beRef)],groups=new Map();
+    for(const l of ins.get(id)||[]){if(!m[l.from])continue;
+      if(!l.group){if(gate(l.from))args.push(`<gate name="${gname(l.from)}"/>`)}
+      else{if(!groups.has(l.group))groups.set(l.group,[]);groups.get(l.group).push(l.from)}}
+    for(const[g,mem]of groups){const r=mem.filter(f=>gate(f)).map(f=>`<gate name="${gname(f)}"/>`),k=voteK(id,g,mem.length);
+      if(r.length===mem.length&&r.length)args.push(r.length===1?r[0]:k>=r.length?`<and>${r.join('')}</and>`:k===1?`<or>${r.join('')}</or>`:`<atleast min="${k}">${r.join('')}</atleast>`)}
+    const label=id===S.top?(S.topText||m[id].name+' output lost'):m[id].name+' output lost';
+    gates.push(`    <define-gate name="${gname(id)}">\n      <label>${x(label)}</label>\n      ${args.length===1?args[0]:`<or>${args.join('')}</or>`}\n    </define-gate>`);
+    stack.delete(id);done.add(id);return true;
+  }
+  if(S.top)gate(S.top);
+  const evs=[...usedEv].map(id=>`    <define-basic-event name="${ename(id)}">\n      <label>${x(M.ev[id].name)}</label>\n      <float value="${M.ev[id].p}"/>\n    </define-basic-event>`);
+  return`<?xml version="1.0" encoding="UTF-8"?>
+<!-- Generated by Fault Tree Workbench. Top gate: ${S.top?gname(S.top):'none'}. Probabilities are per ${S.T} h mission (rates converted with P = 1 - exp(-lambda*T)); common-cause events use the alpha-factor model. -->
+<opsa-mef>
+  <define-fault-tree name="FTW">
+${gates.join('\n')}
+  </define-fault-tree>
+  <model-data>
+${evs.join('\n')}
+  </model-data>
+</opsa-mef>
+`;
+}
+
+/* ---------- file I/O ---------- */
+let dlP=null;
+const downloads=()=>dlP||(dlP=(window.claude&&window.claude.use?window.claude.use('downloads'):Promise.resolve(null)).catch(()=>null));
+function showSheet(title,note,text){$('sheetTitle').textContent=title;$('sheetNote').textContent=note;$('sheetText').value=text;$('sheet').hidden=false;$('sheetText').focus();$('sheetText').select()}
+async function offer(filename,text,label,note){
+  const d=await downloads();
+  if(d){try{await d.save({filename,data:text});status(`${label} saved as ${filename}`);return}
+    catch(e){if(e&&e.code==='declined'){status('Save cancelled');return}
+      if(e&&e.code==='rate_limited'){status('A save prompt is already open',true);return}}}
+  showSheet(label,(note?note+' ':'')+`Saving isn't available in this view, so copy the text below into a file named ${filename.replace(/\.txt$/,'')}.`,text);
+}
+$('sheetClose').onclick=()=>{$('sheet').hidden=true};
+$('sheet').addEventListener('click',e=>{if(e.target.id==='sheet')$('sheet').hidden=true});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')$('sheet').hidden=true});
+$('sheetCopy').onclick=()=>{const t=$('sheetText');const ok=()=>{$('sheetCopy').textContent='Copied';setTimeout(()=>$('sheetCopy').textContent='Copy',1500)};
+  try{navigator.clipboard.writeText(t.value).then(ok,()=>{t.focus();t.select()})}catch(e){t.focus();t.select()}};
+$('fSave').onclick=()=>offer('ft-workbench-project.json',JSON.stringify(S,null,2),'Project');
+$('fIbdSvg').onclick=()=>offer('ibd.svg',ibdSvg(),'IBD SVG');
+$('fSysml').onclick=()=>offer('ibd.sysml.txt',toSysML(),'SysML v2','Saved with a .txt ending because .sysml files cannot be saved from here; rename it to ibd.sysml.');
+$('fFtSvg').onclick=()=>offer('fault-tree.svg',ftSvg(),'Fault tree SVG');
+$('fOpsa').onclick=()=>offer('fault-tree.opsa.xml.txt',toOpenPSA(),'Open-PSA XML','Saved with a .txt ending because .xml files cannot be saved from here; rename it to fault-tree.xml.');
+$('fLoad').onclick=()=>$('fileIn').click();
+$('fileIn').onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();
+  r.onload=()=>{const t=String(r.result);let s=null;
+    try{s=JSON.parse(t)}catch(_){const mm=t.match(/ft-layout:([A-Za-z0-9+/=]+)/);if(mm){try{s=JSON.parse(b64d(mm[1]))}catch(_){}}}
+    try{if(!s)throw new Error('no layout');S=normalize(s);sel=null;connect=false;pending=null;refresh(true);status(`Loaded ${f.name}: ${S.blocks.length} blocks, ${S.links.length} connections`)}
+    catch(err){status(`Couldn't load ${f.name}. Use a project .json or a SysML file exported from this workbench.`,true)}
+    e.target.value=''};
+  r.onerror=()=>status(`Couldn't read ${f.name}.`,true);r.readAsText(f)};
+
+function refresh(full){renderIBD();if(full){renderInsp();renderTop();renderCCF()}renderResults();save()}
+renderTop();renderInsp();renderCCF();refresh(false);
+if(oldSave)status('Click Reset example to load the hexacopter example with 2-of-6 rotor logic.');
+</script>
+
+</body></html>

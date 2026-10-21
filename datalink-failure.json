@@ -1,0 +1,190 @@
+{
+  "top": "mot",
+  "topText": "Loss of Data Link",
+  "T": 1,
+  "ccf": {
+    "1": [
+      0.95,
+      0.05
+    ],
+    "IMU": [
+      0.95,
+      0.05
+    ],
+    "GNSS": [
+      0.95,
+      0.05
+    ],
+    "Pump": [
+      1,
+      0
+    ]
+  },
+  "blocks": [
+    {
+      "id": "imub",
+      "name": "Directional Antenna",
+      "mode": "prob",
+      "v": 0,
+      "x": 89,
+      "y": 101,
+      "st": "Antenna",
+      "ccf": ""
+    },
+    {
+      "id": "fc",
+      "name": "Primary GDT ",
+      "mode": "prob",
+      "v": 0.00045,
+      "x": 321,
+      "y": 112,
+      "st": "Node",
+      "ccf": ""
+    },
+    {
+      "id": "mot",
+      "name": "Ethernet Switch",
+      "mode": "prob",
+      "v": 0.00028,
+      "x": 767,
+      "y": 221,
+      "st": "Engine",
+      "ccf": ""
+    },
+    {
+      "id": "2i1ddr",
+      "name": "Serial to Ethernet Adapter",
+      "mode": "prob",
+      "v": 0.000012,
+      "x": 503,
+      "y": 371,
+      "st": "Adapter",
+      "ccf": ""
+    },
+    {
+      "id": "xk6gi9",
+      "name": "Secondary GDT",
+      "mode": "prob",
+      "v": 0.0004499,
+      "x": 300,
+      "y": 395,
+      "st": "GDT",
+      "ccf": ""
+    },
+    {
+      "id": "wf547o",
+      "name": "Secondary GDT Antenna",
+      "mode": "prob",
+      "v": 0,
+      "x": 77,
+      "y": 397,
+      "st": "part",
+      "ccf": ""
+    },
+    {
+      "id": "60x8mu",
+      "name": "Directional Antenna",
+      "mode": "prob",
+      "v": 0,
+      "x": 96,
+      "y": 195,
+      "st": "part",
+      "ccf": ""
+    },
+    {
+      "id": "xkhdrh",
+      "name": "Primary GDT",
+      "mode": "prob",
+      "v": 0.0004499,
+      "x": 305,
+      "y": 205,
+      "st": "part",
+      "ccf": ""
+    },
+    {
+      "id": "zrthfy",
+      "name": "Directional Antenna",
+      "mode": "prob",
+      "v": 0,
+      "x": 84,
+      "y": 281,
+      "st": "part",
+      "ccf": ""
+    },
+    {
+      "id": "m11t3u",
+      "name": "Primary GDT",
+      "mode": "prob",
+      "v": 0.0004499,
+      "x": 291,
+      "y": 277,
+      "st": "part",
+      "ccf": ""
+    }
+  ],
+  "links": [
+    {
+      "id": "l6",
+      "from": "imub",
+      "to": "fc",
+      "flow": "Signal",
+      "group": ""
+    },
+    {
+      "id": "o8g51t",
+      "from": "2i1ddr",
+      "to": "mot",
+      "flow": "Signal",
+      "group": "Datalink"
+    },
+    {
+      "id": "rd2rvq",
+      "from": "xk6gi9",
+      "to": "2i1ddr",
+      "flow": "Signal",
+      "group": ""
+    },
+    {
+      "id": "hk6eop",
+      "from": "wf547o",
+      "to": "xk6gi9",
+      "flow": "signal",
+      "group": ""
+    },
+    {
+      "id": "qs6voq",
+      "from": "fc",
+      "to": "mot",
+      "flow": "signal",
+      "group": "Datalink"
+    },
+    {
+      "id": "mxxswo",
+      "from": "60x8mu",
+      "to": "xkhdrh",
+      "flow": "signal",
+      "group": ""
+    },
+    {
+      "id": "lhexm8",
+      "from": "zrthfy",
+      "to": "m11t3u",
+      "flow": "signal",
+      "group": ""
+    },
+    {
+      "id": "q3pspa",
+      "from": "xkhdrh",
+      "to": "mot",
+      "flow": "signal",
+      "group": "Datalink"
+    },
+    {
+      "id": "o0p9ss",
+      "from": "m11t3u",
+      "to": "mot",
+      "flow": "signal",
+      "group": "Datalink"
+    }
+  ]
+}
