@@ -113,6 +113,7 @@ input.bad{border-color:var(--critical)}
 .ft-xfer{fill:var(--surface);stroke:var(--flow);stroke-width:1.3}
 .ft-xtxt{font:10px var(--f-mono);fill:var(--flow)}
 .ft-gp{font:10px var(--f-mono);fill:var(--accent)}
+.ft-tid{font:600 10px var(--f-mono);fill:var(--flow)}
 .ft-basic.rep{stroke-width:2.4}
 .ft-rep{font:600 9.5px var(--f-mono);fill:var(--flow)}
 .blk .reptag{font:600 9.5px var(--f-mono);fill:var(--flow)}
@@ -141,13 +142,23 @@ tr.spf .bar>i{background:var(--critical)}
 .sheet-card p{padding:10px 14px 0}
 #sheetText{flex:1;min-height:260px;margin:10px 14px 14px;font:12px/1.5 var(--f-mono);color:var(--ink);background:var(--bg);border:1px solid var(--line-strong);border-radius:4px;padding:10px;resize:vertical;width:auto}
 @media (prefers-reduced-motion:no-preference){.bar>i{transition:width .25s ease}}
+.frm-body{fill:var(--flow);fill-opacity:.05;stroke:var(--flow);stroke-width:1.2;stroke-dasharray:5 4;cursor:move}
+.frm.sel .frm-body{stroke-width:2.2;stroke-dasharray:none}
+.frm-tab{fill:var(--surface);stroke:var(--flow);stroke-width:1;cursor:move}
+.frm-lbl{font:600 11px var(--f-body);fill:var(--flow);pointer-events:none}
+.frm-rs{fill:var(--flow);cursor:nwse-resize}
+.blk.topev rect.body{fill:var(--accent-soft);stroke:var(--accent);stroke-width:2}
+.blk.topev.sel rect.body{stroke:var(--flow);stroke-width:3}
+.blk .toptag2{font:600 9.5px var(--f-mono);fill:var(--accent);letter-spacing:.08em}
+.blk .tename{font:600 12.5px var(--f-body);fill:var(--ink)}
+.ft-box.frm{stroke:var(--flow);stroke-width:1.5}
 </style>
 
 <div class="wrap">
   <header>
     <div>
       <h1>IBD <span class="arrow">→</span> Fault Tree</h1>
-      <p class="sub">Draw the internal block diagram, give each block a failure rate or fixed probability, mark redundant inputs and common-cause groups, and pick the top event. The fault tree, minimal cut sets and top-event probability regenerate as you edit.</p>
+      <p class="sub">Draw the internal block diagram, give each block a failure rate or fixed probability, mark redundant inputs and common-cause groups, and connect the blocks whose loss causes the top event. Frames group blocks under a labelled event in the tree. The fault tree, minimal cut sets and top-event probability regenerate as you edit.</p>
     </div>
     <span class="tag">Example data · fake rates</span>
   </header>
@@ -155,6 +166,7 @@ tr.spf .bar>i{background:var(--critical)}
   <section class="panel">
     <div class="filebar">
       <div class="fgroup"><span class="flabel">Project</span><button id="fLoad" type="button">Load file…</button><button id="fSave" type="button">Save .json</button></div>
+      <div class="fgroup"><span class="flabel">Edit</span><button id="fUndo" type="button" title="Undo (Ctrl+Z)">Undo</button><button id="fRedo" type="button" title="Redo (Ctrl+Shift+Z or Ctrl+Y)">Redo</button></div>
       <div class="fgroup"><span class="flabel">IBD</span><button id="fIbdPptx" type="button">PowerPoint</button><button id="fIbdSvg" type="button">SVG</button><button id="fSysml" type="button">SysML v2</button></div>
       <div class="fgroup"><span class="flabel">Fault tree</span><button id="fFtPptx" type="button">PowerPoint</button><button id="fFtSvg" type="button">SVG</button><button id="fOpsa" type="button">Open-PSA XML</button></div>
       <span id="status" class="note" role="status"></span>
@@ -168,8 +180,12 @@ tr.spf .bar>i{background:var(--critical)}
         <h2>Internal block diagram</h2>
         <div class="toolbar">
           <button id="btnAdd" type="button">+ Block</button>
+          <button id="btnFrame" type="button">+ Frame</button>
           <button id="btnConnect" type="button">Connect</button>
-          <button id="btnDel" type="button" class="danger">Delete</button>
+          <button id="btnCopy" type="button" title="Copy the selected block, or a frame with its blocks (Ctrl+C)">Copy</button>
+          <button id="btnPaste" type="button" title="Paste (Ctrl+V)">Paste</button>
+          <button id="btnDel" type="button" class="danger" title="Delete the selection (Delete key, or Ctrl+X to cut)">Delete</button>
+          <button id="btnClear" type="button" class="danger">Clear</button>
           <button id="btnReset" type="button">Reset example</button>
         </div>
       </div>
@@ -178,7 +194,7 @@ tr.spf .bar>i{background:var(--critical)}
           <defs>
             <marker id="arrowhead" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z"/></marker>
           </defs>
-          <g id="ibdLinks"></g><g id="ibdBlocks"></g>
+          <g id="ibdFrames"></g><g id="ibdLinks"></g><g id="ibdBlocks"></g>
         </svg>
       </div>
       <div class="hint" id="hint"></div>
@@ -188,7 +204,7 @@ tr.spf .bar>i{background:var(--critical)}
       <div class="sect">
         <h2>Top event</h2>
         <label class="f">Undesired event<input id="topText" type="text"></label>
-        <label class="f">Occurs when this block's output is lost<select id="topSel"></select></label>
+        <p class="note">The top event is the <b>TOP EVENT</b> node on the diagram. It isn't a component: connect the blocks whose loss causes it, using a redundancy group for k-of-n logic.</p>
         <label class="f">Mission time (hours)<input id="missionT" class="mono" type="text" inputmode="decimal"></label>
         <p class="note">Blocks with a constant failure rate λ use P = 1 − e<sup>−λT</sup> over the mission time. Fixed-probability blocks ignore it.</p>
       </div>
@@ -198,6 +214,7 @@ tr.spf .bar>i{background:var(--critical)}
         <h2>Failure logic</h2>
         <p class="note">A block's output is lost if the block itself fails, <b>or</b> any required input is lost, <b>or</b> a redundancy group is lost. A group is lost when at least k of its n inputs are lost (k = n by default). A block with probability 0 never fails on its own.</p>
         <p class="note">A block that feeds several others is one basic event, however many branches of the tree it appears in. Blocks given the same <b>shared failure event</b> tag are one physical failure drawn in several places, and also share one event. Each event is counted once: probabilities are computed exactly from a binary decision diagram, so a repeated event is never double counted.</p>
+        <p class="note">A <b>frame</b> groups the failures that leave it under one labelled event in the tree, such as "Failure of primary GNSS". Frames add context only; they never change the probability.</p>
         <p class="note">Common-cause groups use the alpha-factor model: Q<sub>k</sub> = k / C(m−1, k−1) · α<sub>k</sub> / α<sub>t</sub> · Q<sub>t</sub>, with α<sub>t</sub> = Σ k·α<sub>k</sub>.</p>
       </div>
     </aside>
@@ -206,7 +223,7 @@ tr.spf .bar>i{background:var(--critical)}
   <section class="panel"><div class="readout" id="readout"></div></section>
 
   <section class="panel">
-    <div class="panel-h"><h2>Generated fault tree</h2><span class="note">△ = transfer to a subtree drawn elsewhere · red = single-point failure · dashed = common cause · R×n = repeated event, counted once</span></div>
+    <div class="panel-h"><h2>Generated fault tree</h2><span class="note">△ Tn = same branch as the box tagged Tn, drawn in full elsewhere · red = single-point failure · dashed = common cause · blue box = frame · R×n = repeated event, counted once</span></div>
     <div class="ft-wrap"><svg id="ft" aria-label="Generated fault tree"></svg></div>
   </section>
 
@@ -233,11 +250,18 @@ tr.spf .bar>i{background:var(--critical)}
 <script>
 const KEY='ft-workbench-v2';
 const W=128,H=54,CW=1300,CH=520;
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const uid=()=>Math.random().toString(36).slice(2,8);
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const fmt=p=>p>0?p.toExponential(2).replace('e-','e−'):'0';
+const isTop=b=>!!b&&b.kind==='top';
 function example(){
-  const b=(id,name,v,x,y,st,ccf='')=>({id,name,mode:'rate',v,x,y,st,ccf});
+  const b=(id,name,v,x,y,st,ccf='')=>({id,name,mode:'rate',v,x,y,st,ccf,rep:'',kind:''});
   const motors=[1,2,3,4,5,6].map(i=>b('m'+i,'Motor '+i,2e-5,885,12+(i-1)*83,'actuation'));
-  const thrust={id:'thrust',name:'Thrust',mode:'prob',v:0,x:1150,y:220,st:'function',ccf:''};
+  const top={id:'thrust',kind:'top',name:'Loss of thrust',mode:'prob',v:0,x:1150,y:220,st:'',ccf:'',rep:''};
   return {top:'thrust',topText:'Loss of thrust',T:1,ccf:{IMU:[0.95,0.05],GNSS:[0.95,0.05]},vote:{'thrust|Rotors':2},
+    frames:[{id:'fimu',label:'Loss of attitude data',x:344,y:16,w:160,h:184},{id:'fgnss',label:'Loss of position data',x:344,y:286,w:160,h:184}],
     blocks:[
       b('bat','Battery',2e-5,10,220,'power'),
       b('pdb','PDB',5e-6,185,220,'power'),
@@ -247,7 +271,7 @@ function example(){
       b('gpsb','GNSS B',1e-4,360,400,'sensor','GNSS'),
       b('fc','Flight Ctrl',1e-5,535,220,'compute'),
       b('esc','ESC 6-in-1',3e-5,710,220,'actuation'),
-      ...motors,thrust],
+      ...motors,top],
     links:[
       ...[1,2,3,4,5,6].flatMap(i=>[{id:'le'+i,from:'esc',to:'m'+i,flow:'3φ',group:''},{id:'lt'+i,from:'m'+i,to:'thrust',flow:'lift',group:'Rotors'}]),
       {id:'l1',from:'bat',to:'pdb',flow:'28V',group:''},
@@ -268,84 +292,153 @@ function normalize(s){
   if(!s||!Array.isArray(s.blocks)||!Array.isArray(s.links))throw new Error('missing blocks or links');
   s.ccf=s.ccf&&typeof s.ccf==='object'?s.ccf:{};s.vote=s.vote&&typeof s.vote==='object'?s.vote:{};s.T=+s.T>0?+s.T:1;s.topText=String(s.topText||'');
   for(const b of s.blocks){
-    if(!b.id)b.id=Math.random().toString(36).slice(2,8);
+    if(!b.id)b.id=uid();
     if(b.v==null){b.v=+b.p||0;b.mode='rate'}delete b.p;
     b.mode=b.mode==='prob'?'prob':'rate';b.v=Math.max(0,+b.v||0);if(b.mode==='prob')b.v=Math.min(1,b.v);
-    b.x=+b.x||0;b.y=+b.y||0;b.name=String(b.name||'Block');b.st=String(b.st||'');b.ccf=String(b.ccf||'');b.rep=String(b.rep||'').trim();}
+    b.x=+b.x||0;b.y=+b.y||0;b.name=String(b.name||'Block');b.st=String(b.st||'');b.ccf=String(b.ccf||'');b.rep=String(b.rep||'').trim();
+    b.kind=b.kind==='top'?'top':'';}
+  // exactly one top-event node
+  const tops=s.blocks.filter(isTop);tops.slice(1).forEach(b=>b.kind='');
+  let top=tops[0];
+  if(!top){
+    // older files picked a block as the top event: that block now feeds a separate top-event node
+    const old=s.blocks.find(b=>b.id===s.top);
+    top={id:uid(),kind:'top',name:s.topText||(old?old.name+' output lost':'Top event'),x:CW-W-40,y:Math.round(CH/2-H/2)};
+    if(old){if(old.x+W+50<=CW-W){top.x=old.x+W+50;top.y=old.y}else{top.x=old.x;top.y=Math.min(CH-H,old.y+H+40)}}
+    s.blocks.push(top);
+    if(old)s.links.push({id:uid(),from:old.id,to:top.id,flow:'',group:''});
+  }
+  Object.assign(top,{mode:'prob',v:0,st:'',ccf:'',rep:'',name:String(top.name||s.topText||'Top event')});
+  s.top=top.id;s.topText=top.name;
   const ids=new Set(s.blocks.map(b=>b.id));
-  s.links=s.links.filter(l=>ids.has(l.from)&&ids.has(l.to)).map(l=>({id:l.id||Math.random().toString(36).slice(2,8),from:l.from,to:l.to,flow:String(l.flow||''),group:String(l.group||'')}));
-  if(!ids.has(s.top))s.top=s.blocks[0]?.id;
+  s.links=s.links.filter(l=>ids.has(l.from)&&ids.has(l.to)&&l.from!==l.to&&l.from!==s.top)
+    .map(l=>({id:l.id||uid(),from:l.from,to:l.to,flow:String(l.flow||''),group:String(l.group||'')}));
+  s.frames=(Array.isArray(s.frames)?s.frames:[]).map(f=>({id:f.id||uid(),label:String(f.label||'Subsystem'),
+    x:clamp(+f.x||0,0,CW-80),y:clamp(+f.y||0,0,CH-60),w:Math.max(80,+f.w||200),h:Math.max(60,+f.h||120)}));
   return s;
 }
 let S,oldSave=false;
+// undo history: snapshots of the project; a burst of edits (typing in a field, one drag) settles into one step
+const hist={undo:[],redo:[],cur:null,t:null};
 try{const raw=JSON.parse(localStorage.getItem(KEY));oldSave=!!raw&&!raw.vote;S=normalize(raw)}catch(e){S=example()}
-let sel=null,connect=false,pending=null,drag=null;
-const $=id=>document.getElementById(id);
-const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const uid=()=>Math.random().toString(36).slice(2,8);
-const fmt=p=>p>0?p.toExponential(2).replace('e-','e−'):'0';
+let sel=null,connect=false,pending=null,drag=null,clip=null;
 const mT=()=>S.T>0?S.T:1;
 const pb=b=>b.mode==='prob'?b.v:1-Math.exp(-b.v*mT());
-function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}clearTimeout(hist.t);hist.t=setTimeout(commit,500)}
+function commit(){clearTimeout(hist.t);hist.t=null;const now=JSON.stringify(S);
+  if(hist.cur!==null&&now!==hist.cur){hist.undo.push(hist.cur);if(hist.undo.length>100)hist.undo.shift();hist.redo=[]}
+  hist.cur=now;undoBtns()}
+function undoBtns(){$('fUndo').disabled=!hist.undo.length;$('fRedo').disabled=!hist.redo.length}
+function step(back){
+  if(drag)return;commit();const from=back?hist.undo:hist.redo,to=back?hist.redo:hist.undo;
+  if(!from.length){status(back?'Nothing to undo':'Nothing to redo');return}
+  to.push(hist.cur);hist.cur=from.pop();S=normalize(JSON.parse(hist.cur));
+  const m=byId();if(sel&&!(sel.t==='b'?m[sel.id]:sel.t==='l'?S.links.find(l=>l.id===sel.id):S.frames.find(f=>f.id===sel.id)))sel=null;
+  connect=false;pending=null;refresh(true);
+  clearTimeout(hist.t);hist.t=null;hist.cur=JSON.stringify(S);undoBtns();status(back?'Undone':'Redone')}
 const byId=()=>Object.fromEntries(S.blocks.map(b=>[b.id,b]));
+const topNode=()=>S.blocks.find(isTop);
+function setTopName(t){const n=topNode();if(n)n.name=t;S.topText=t}
 function status(msg,err){const el=$('status');el.textContent=msg;el.classList.toggle('err',!!err)}
 
-/* ---------- IBD canvas ---------- */
-function bezier(a,b){
-  const sx=a.x+W,sy=a.y+H/2,tx=b.x,ty=b.y+H/2,dx=Math.max(40,Math.abs(tx-sx)/2);
-  const c1x=sx+dx,c2x=tx-dx,m=t=>{const u=1-t;return[u*u*u*sx+3*u*u*t*c1x+3*u*t*t*c2x+t*t*t*tx,u*u*u*sy+3*u*u*t*sy+3*u*t*t*ty+t*t*t*ty]};
-  return{d:`M${sx},${sy} C${c1x},${sy} ${c2x},${ty} ${tx-2},${ty}`,mid:m(.5),sx,sy,tx,ty};
+/* ---------- IBD geometry: connections leave from whichever side faces the other block ---------- */
+const ctr=b=>({x:b.x+W/2,y:b.y+H/2});
+const inFrame=(f,b)=>{const c=ctr(b);return c.x>=f.x&&c.x<=f.x+f.w&&c.y>=f.y&&c.y<=f.y+f.h};
+const NRM={r:[1,0],l:[-1,0],b:[0,1],t:[0,-1]},OPP={r:'l',l:'r',t:'b',b:'t'};
+// sideways whenever the blocks have horizontal clearance; top or bottom only when they're stacked
+function sideToward(a,b){const A=ctr(a),B=ctr(b),dx=B.x-A.x,dy=B.y-A.y;
+  return Math.abs(dx)-W>12||Math.abs(dy)<H?(dx>=0?'r':'l'):(dy>=0?'b':'t')}
+function routes(){
+  const m=byId(),R=new Map(),slots=new Map();
+  for(const l of S.links){const a=m[l.from],b=m[l.to];if(!a||!b)continue;
+    const s=sideToward(a,b),t=OPP[s];R.set(l.id,{l,a,b,s,t});
+    for(const[blk,side,end,oth]of[[a,s,'s',b],[b,t,'t',a]]){const k=blk.id+'|'+side;if(!slots.has(k))slots.set(k,[]);slots.get(k).push({id:l.id,end,o:ctr(oth)})}}
+  // spread several connections on one side of a block, ordered so they don't cross
+  for(const[k,list]of slots){const side=k.slice(-1),hz=side==='t'||side==='b';list.sort((p,q)=>hz?p.o.x-q.o.x:p.o.y-q.o.y);
+    list.forEach((e,i)=>{R.get(e.id)[e.end+'f']=(i+1)/(list.length+1)})}
+  const port=(b,side,f)=>side==='r'?[b.x+W,b.y+H*f]:side==='l'?[b.x,b.y+H*f]:side==='b'?[b.x+W*f,b.y+H]:[b.x+W*f,b.y];
+  for(const r of R.values()){
+    const[sx,sy]=port(r.a,r.s,r.sf),[tx,ty]=port(r.b,r.t,r.tf),ns=NRM[r.s],nt=NRM[r.t];
+    const d=Math.max(30,Math.hypot(tx-sx,ty-sy)/2.5);
+    const c1=[sx+ns[0]*d,sy+ns[1]*d],c2=[tx+nt[0]*d,ty+nt[1]*d],e=[tx+nt[0]*2,ty+nt[1]*2];
+    const at=t=>{const u=1-t;return[0,1].map(i=>u*u*u*[sx,sy][i]+3*u*u*t*c1[i]+3*u*t*t*c2[i]+t*t*t*e[i])};
+    Object.assign(r,{sx,sy,tx,ty,c1,c2,e,mid:at(.5),d:`M${sx},${sy} C${c1} ${c2} ${e}`});}
+  return R;
 }
 function linkText(l){let t=l.flow;if(l.group){const n=groupSize(l.to,l.group),k=voteK(l.to,l.group,n);t+=` ∥${l.group}`+(n>1&&k<n?` ${k}/${n}`:'')}return t}
 function rateText(b){return b.mode==='prob'?(b.v>0?`P ${fmt(b.v)} fixed`:'P 0 · never fails'):`λ ${fmt(b.v)} /h`}
+function wrap(t,n){const w=String(t).split(/\s+/),L=[];let c='';for(const x of w){if((c+' '+x).trim().length>n&&c){L.push(c);c=x}else c=(c+' '+x).trim()}if(c)L.push(c);
+  if(L.length>2){L.length=2;L[1]=L[1].slice(0,n-1)+'…'}return L}
+const clipText=(t,px,cw)=>{const n=Math.max(3,Math.floor(px/cw));return t.length>n?t.slice(0,n-1)+'…':t};
+
+/* ---------- IBD canvas ---------- */
 function renderIBD(){
-  const m=byId();let L='';
-  for(const l of S.links){const a=m[l.from],b=m[l.to];if(!a||!b)continue;
-    const txt=linkText(l),g=bezier(a,b),w=txt.length*6.4+10;
+  const m=byId(),R=routes();
+  let F='';
+  for(const f of S.frames){const s=sel&&sel.t==='f'&&sel.id===f.id?' sel':'',lb=clipText(f.label,f.w-16,6.3),tw=Math.min(f.w,lb.length*6.3+16);
+    F+=`<g class="frm${s}" data-frame="${f.id}"><rect class="frm-body" x="${f.x}" y="${f.y}" width="${f.w}" height="${f.h}" rx="6"/>`+
+      `<rect class="frm-tab" x="${f.x}" y="${f.y}" width="${tw}" height="18" rx="4"/><text class="frm-lbl" x="${f.x+8}" y="${f.y+13}">${esc(lb)}</text>`+
+      `<rect class="frm-rs" data-resize="${f.id}" x="${f.x+f.w-11}" y="${f.y+f.h-11}" width="11" height="11" rx="2"/></g>`;}
+  $('ibdFrames').innerHTML=F;
+  let L='';
+  for(const r of R.values()){const l=r.l,txt=linkText(l),w=txt.length*6.4+10;
     const s=sel&&sel.t==='l'&&sel.id===l.id?' sel':'';
-    L+=`<g data-link="${l.id}"><path class="link${l.group?' grp':''}${s}" d="${g.d}" marker-end="url(#arrowhead)"/><path class="linkhit" d="${g.d}"/>`+
-      (txt?`<rect class="lbl-bg" x="${g.mid[0]-w/2}" y="${g.mid[1]-9}" width="${w}" height="17" rx="3"/><text class="lbl" x="${g.mid[0]}" y="${g.mid[1]+3.5}" text-anchor="middle">${esc(txt)}</text>`:'')+
-      `<rect class="port" x="${g.sx-4}" y="${g.sy-4}" width="8" height="8"/><rect class="port" x="${g.tx-4}" y="${g.ty-4}" width="8" height="8"/></g>`;}
+    L+=`<g data-link="${l.id}"><path class="link${l.group?' grp':''}${s}" d="${r.d}" marker-end="url(#arrowhead)"/><path class="linkhit" d="${r.d}"/>`+
+      (txt?`<rect class="lbl-bg" x="${r.mid[0]-w/2}" y="${r.mid[1]-9}" width="${w}" height="17" rx="3"/><text class="lbl" x="${r.mid[0]}" y="${r.mid[1]+3.5}" text-anchor="middle">${esc(txt)}</text>`:'')+
+      `<rect class="port" x="${r.sx-3.5}" y="${r.sy-3.5}" width="7" height="7"/><rect class="port" x="${r.tx-3.5}" y="${r.ty-3.5}" width="7" height="7"/></g>`;}
   $('ibdLinks').innerHTML=L;
   let B='';
   for(const b of S.blocks){
-    const cls=['blk'];if(sel&&sel.t==='b'&&sel.id===b.id)cls.push('sel');if(pending===b.id)cls.push('pending');if(S.top===b.id)cls.push('top');
+    const cls=['blk'];if(sel&&sel.t==='b'&&sel.id===b.id)cls.push('sel');if(pending===b.id)cls.push('pending');
+    if(isTop(b)){cls.push('topev');const nl=wrap(b.name||'Top event',18);
+      B+=`<g class="${cls.join(' ')}" data-block="${b.id}" transform="translate(${b.x},${b.y})"><rect class="body" width="${W}" height="${H}" rx="14"/>`+
+        `<text class="toptag2" x="${W/2}" y="14" text-anchor="middle">TOP EVENT</text>`+
+        nl.map((t,i)=>`<text class="tename" x="${W/2}" y="${(nl.length===1?36:29)+i*14}" text-anchor="middle">${esc(t)}</text>`).join('')+`</g>`;continue}
     B+=`<g class="${cls.join(' ')}" data-block="${b.id}" transform="translate(${b.x},${b.y})"><rect class="body" width="${W}" height="${H}" rx="4"/>`+
       `<text class="stereo" x="8" y="13">«${esc(b.st||'part')}»</text><text class="name" x="8" y="30">${esc(b.name)}</text><text class="rate" x="8" y="46">${esc(rateText(b))}</text>`+
       (b.rep?`<text class="reptag" x="2" y="-4">≡ ${esc(b.rep)}</text>`:'')+
-      (b.ccf?`<text class="ccftag" x="${W-7}" y="13" text-anchor="end">CCF·${esc(b.ccf)}</text>`:'')+
-      (S.top===b.id?`<rect class="toptagbg" x="${W-34}" y="-8" width="34" height="15" rx="2"/><text class="toptag" x="${W-17}" y="3" text-anchor="middle">TOP</text>`:'')+`</g>`;}
+      (b.ccf?`<text class="ccftag" x="${W-7}" y="13" text-anchor="end">CCF·${esc(b.ccf)}</text>`:'')+`</g>`;}
   $('ibdBlocks').innerHTML=B;
   $('btnConnect').classList.toggle('on',connect);
-  $('hint').innerHTML=connect?(pending?`<b>Connect:</b> tap the target block that receives this flow`:`<b>Connect:</b> tap the source block`)
-    :`<span>Drag blocks to arrange. Tap a block or connection to edit it.</span><span class="legend"><svg width="26" height="6"><line x1="0" y1="3" x2="26" y2="3" stroke="var(--flow)" stroke-width="1.6"/></svg>required input</span><span class="legend"><svg width="26" height="6"><line x1="0" y1="3" x2="26" y2="3" stroke="var(--flow)" stroke-width="1.6" stroke-dasharray="6 4"/></svg>redundancy group</span>`;
+  $('hint').innerHTML=connect?(pending?`<b>Connect:</b> tap the block that receives this flow`:`<b>Connect:</b> tap the source block`)
+    :`<span>Drag blocks or frames to arrange; drag a frame's corner to resize it. Connections can run in any direction: the arrow shows the flow.</span><span class="legend"><svg width="26" height="6"><line x1="0" y1="3" x2="26" y2="3" stroke="var(--flow)" stroke-width="1.6"/></svg>required input</span><span class="legend"><svg width="26" height="6"><line x1="0" y1="3" x2="26" y2="3" stroke="var(--flow)" stroke-width="1.6" stroke-dasharray="6 4"/></svg>redundancy group</span>`;
 }
 const svg=$('ibd');
 function pt(e){const p=svg.createSVGPoint();p.x=e.clientX;p.y=e.clientY;return p.matrixTransform(svg.getScreenCTM().inverse())}
 svg.addEventListener('pointerdown',e=>{
-  const bg=e.target.closest('[data-block]'),lg=e.target.closest('[data-link]');
-  if(bg){const id=bg.dataset.block;
+  const bg=e.target.closest('[data-block]'),lg=e.target.closest('[data-link]'),rs=e.target.closest('[data-resize]'),fg=e.target.closest('[data-frame]'),p=pt(e);
+  if(bg){const id=bg.dataset.block,b=byId()[id];
     if(connect){
-      if(!pending)pending=id;
+      if(!pending){if(isTop(b)){status('The top event only receives connections. Tap a block to start from.',true);return}pending=id}
       else if(pending!==id){
-        if(!S.links.some(l=>l.from===pending&&l.to===id))S.links.push({id:uid(),from:pending,to:id,flow:'signal',group:''});
-        sel={t:'l',id:S.links.at(-1).id};pending=null;connect=false;refresh(true);return;}
+        if(!S.links.some(l=>l.from===pending&&l.to===id))S.links.push({id:uid(),from:pending,to:id,flow:isTop(b)?'':'signal',group:''});
+        sel={t:'l',id:S.links.find(l=>l.from===pending&&l.to===id).id};pending=null;connect=false;refresh(true);return;}
       renderIBD();return;}
-    sel={t:'b',id};const b=byId()[id],p=pt(e);drag={id,ox:p.x-b.x,oy:p.y-b.y,moved:false};
+    sel={t:'b',id};drag={kind:'block',id,ox:p.x-b.x,oy:p.y-b.y,moved:false};
     svg.setPointerCapture(e.pointerId);renderIBD();renderInsp();return;}
-  if(lg&&!connect){sel={t:'l',id:lg.dataset.link};renderIBD();renderInsp();return;}
-  if(!connect){sel=null;renderIBD();renderInsp();}
+  if(connect)return;
+  if(lg){sel={t:'l',id:lg.dataset.link};renderIBD();renderInsp();return}
+  if(rs){const f=S.frames.find(f=>f.id===rs.dataset.resize);sel={t:'f',id:f.id};drag={kind:'resize',id:f.id,ox:p.x-(f.x+f.w),oy:p.y-(f.y+f.h),moved:false};
+    svg.setPointerCapture(e.pointerId);renderIBD();renderInsp();return}
+  if(fg){const f=S.frames.find(f=>f.id===fg.dataset.frame);sel={t:'f',id:f.id};
+    // moving a frame carries the blocks inside it
+    drag={kind:'frame',id:f.id,ox:p.x-f.x,oy:p.y-f.y,fx:f.x,fy:f.y,items:S.blocks.filter(b=>inFrame(f,b)).map(b=>({b,x:b.x,y:b.y})),moved:false};
+    svg.setPointerCapture(e.pointerId);renderIBD();renderInsp();return}
+  sel=null;renderIBD();renderInsp();
 });
-svg.addEventListener('pointermove',e=>{if(!drag)return;const b=byId()[drag.id],p=pt(e);
-  b.x=Math.max(0,Math.min(CW-W,Math.round(p.x-drag.ox)));b.y=Math.max(8,Math.min(CH-H,Math.round(p.y-drag.oy)));drag.moved=true;renderIBD();});
-const end=()=>{if(drag&&drag.moved)save();drag=null};
+svg.addEventListener('pointermove',e=>{if(!drag)return;const p=pt(e);
+  if(drag.kind==='block'){const b=byId()[drag.id];b.x=clamp(Math.round(p.x-drag.ox),0,CW-W);b.y=clamp(Math.round(p.y-drag.oy),8,CH-H)}
+  else{const f=S.frames.find(f=>f.id===drag.id);if(!f)return;
+    if(drag.kind==='resize'){f.w=clamp(Math.round(p.x-drag.ox-f.x),80,CW-f.x);f.h=clamp(Math.round(p.y-drag.oy-f.y),60,CH-f.y)}
+    else{f.x=clamp(Math.round(p.x-drag.ox),0,CW-f.w);f.y=clamp(Math.round(p.y-drag.oy),0,CH-f.h);const dx=f.x-drag.fx,dy=f.y-drag.fy;
+      for(const it of drag.items){it.b.x=clamp(it.x+dx,0,CW-W);it.b.y=clamp(it.y+dy,8,CH-H)}}}
+  drag.moved=true;renderIBD();});
+// frame membership and connection sides depend on position, so the tree regenerates after a move
+const end=()=>{if(drag&&drag.moved){renderResults();save()}drag=null};
 svg.addEventListener('pointerup',end);svg.addEventListener('pointercancel',end);
 
 /* ---------- inspector ---------- */
-function renderTop(){
-  $('topText').value=S.topText;$('missionT').value=S.T;
-  $('topSel').innerHTML=S.blocks.map(b=>`<option value="${b.id}"${b.id===S.top?' selected':''}>${esc(b.name)}</option>`).join('');
-}
+function renderTop(){if(document.activeElement!==$('topText'))$('topText').value=S.topText;$('missionT').value=S.T}
 function derivedLine(b){return b.mode==='prob'?'Fixed per mission, independent of mission time':`P over ${mT()} h = ${fmt(pb(b))}`}
 function repNote(b){
   if(!b.rep)return'Give blocks the same tag when they are one physical failure drawn in several places, e.g. a shared antenna. It is then counted once.';
@@ -355,7 +448,12 @@ function repNote(b){
 }
 function renderInsp(){
   const el=$('insp'),m=byId();
-  if(sel&&sel.t==='b'&&m[sel.id]){const b=m[sel.id];
+  if(sel&&sel.t==='b'&&isTop(m[sel.id])){const b=m[sel.id];
+    el.innerHTML=`<h2>Top event</h2><label class="f">Undesired event<input id="iTopName" type="text" value="${esc(b.name)}"></label>
+      <p class="note">The top event isn't a component and has no failure data, so it never appears as a basic event. Connect the blocks whose loss causes it. To make it k-of-n, give those connections one redundancy group and set k, e.g. 2 of 6 rotors.</p>
+      <p class="note">Inputs: ${(inputsOf().get(b.id)||[]).map(l=>esc(m[l.from]?.name)).join(', ')||'none yet'}.</p>`;
+    $('iTopName').oninput=e=>{setTopName(e.target.value);renderTop();refresh(false)};
+  }else if(sel&&sel.t==='b'&&m[sel.id]){const b=m[sel.id];
     el.innerHTML=`<h2>Block</h2><label class="f">Name<input id="iName" type="text" value="${esc(b.name)}"></label>
       <label class="f">Stereotype<input id="iSt" type="text" value="${esc(b.st||'')}"></label>
       <label class="f">Failure model<select id="iMode"><option value="rate"${b.mode==='rate'?' selected':''}>Constant failure rate λ</option><option value="prob"${b.mode==='prob'?' selected':''}>Fixed probability</option></select></label>
@@ -364,9 +462,9 @@ function renderInsp(){
       <label class="f">Common-cause group<input id="iCcf" type="text" placeholder="e.g. IMU — empty = none" value="${esc(b.ccf||'')}"></label>
       <label class="f">Shared failure event<input id="iRep" type="text" placeholder="e.g. ANT-1 — empty = own event" value="${esc(b.rep||'')}"></label>
       <p class="note" id="iRepN">${esc(repNote(b))}</p>
-      <div class="row"><button id="iTop" type="button">Set as top event</button><button id="iZero" type="button">Never fails (P = 0)</button></div>`;
+      <div class="row"><button id="iZero" type="button">Never fails (P = 0)</button></div>`;
     const sync=()=>{if(b.rep)for(const o of S.blocks)if(o!==b&&o.rep===b.rep){o.mode=b.mode;o.v=b.v}};
-    $('iName').oninput=e=>{b.name=e.target.value;refresh(false);renderTop();renderCCF()};
+    $('iName').oninput=e=>{b.name=e.target.value;refresh(false);renderCCF()};
     $('iSt').oninput=e=>{b.st=e.target.value;refresh(false)};
     $('iMode').onchange=e=>{const P=pb(b);b.mode=e.target.value;
       b.v=b.mode==='prob'?+P.toPrecision(4):(P<1?+(-Math.log(1-P)/mT()).toPrecision(4):b.v);sync();renderInsp();refresh(false)};
@@ -376,7 +474,6 @@ function renderInsp(){
     $('iRep').onchange=e=>{b.rep=e.target.value.trim();const p=b.rep&&repPrimary().get(b.rep);
       if(p&&p!==b){b.mode=p.mode;b.v=p.v}renderInsp();renderCCF();refresh(false)};
     $('iCcf').oninput=e=>{b.ccf=e.target.value.trim();renderCCF();refresh(false)};
-    $('iTop').onclick=()=>{S.top=b.id;renderTop();refresh(false)};
   }else if(sel&&sel.t==='l'&&S.links.find(l=>l.id===sel.id)){const l=S.links.find(l=>l.id===sel.id);
     const n=l.group?groupSize(l.to,l.group):0;
     el.innerHTML=`<h2>Connection · ${esc(m[l.from]?.name)} → ${esc(m[l.to]?.name)}</h2>
@@ -384,39 +481,102 @@ function renderInsp(){
       <label class="f">Redundancy group<input id="iGrp" type="text" placeholder="empty = required input" value="${esc(l.group)}"></label>
       ${n>1?`<label class="f">Group ${esc(l.group)} is lost when at least this many of its ${n} inputs are lost<input id="iK" class="mono" type="text" inputmode="numeric" value="${voteK(l.to,l.group,n)}"></label>
       <p class="derived" id="iKd"></p>`:''}
+      <div class="row"><button id="iRev" type="button">Reverse direction</button></div>
       <p class="note">Inputs into the same block that share a group name back each other up. By default the group is lost only when all of them are lost; set a lower number for k-of-n logic, such as 2 of 6 rotors.</p>`;
     const kd=()=>{const d=$('iKd');if(!d)return;const k=voteK(l.to,l.group,n);
       d.textContent=k===n?`AND: all ${n} must be lost`:k===1?'OR: any one lost is enough':`Voting: ${k} of ${n} lost`};kd();
     $('iFlow').oninput=e=>{l.flow=e.target.value;refresh(false)};
     $('iGrp').oninput=e=>{l.group=e.target.value.trim();refresh(false)};
     $('iGrp').onchange=()=>renderInsp();
+    $('iRev').onclick=()=>{if(isTop(m[l.to])){status('Connections into the top event can\'t be reversed: it only receives.',true);return}
+      if(S.links.some(o=>o.from===l.to&&o.to===l.from)){status('A connection already runs the other way.',true);return}
+      [l.from,l.to]=[l.to,l.from];l.group='';refresh(true)};
     if($('iK'))$('iK').oninput=e=>{const v=+e.target.value;const ok=Number.isInteger(v)&&v>=1&&v<=n;e.target.classList.toggle('bad',!ok);
       if(ok){S.vote[vkey(l.to,l.group)]=v;kd();refresh(false)}};
-  }else el.innerHTML=`<h2>Selection</h2><p class="empty">Tap a block to set its name, failure model and common-cause group, or a connection to set its flow and redundancy group.</p>`;
+  }else if(sel&&sel.t==='f'&&S.frames.find(f=>f.id===sel.id)){const f=S.frames.find(f=>f.id===sel.id),inside=S.blocks.filter(b=>inFrame(f,b));
+    el.innerHTML=`<h2>Frame</h2><label class="f">Label shown in the fault tree<input id="iFl" type="text" value="${esc(f.label)}"></label>
+      <p class="note">Contains: ${inside.map(b=>esc(b.name)).join(', ')||'no blocks yet — move or resize the frame so blocks sit inside it'}.</p>
+      <p class="note">Failures that leave this frame are grouped under this label in the fault tree. A block is inside when its centre is. Moving the frame moves its blocks; Delete removes only the frame.</p>`;
+    $('iFl').oninput=e=>{f.label=e.target.value;refresh(false)};
+  }else el.innerHTML=`<h2>Selection</h2><p class="empty">Tap a block to set its name, failure model and common-cause group, a connection to set its flow and redundancy group, or a frame to set its label.</p>`;
 }
-$('topText').oninput=e=>{S.topText=e.target.value;refresh(false)};
-$('topSel').onchange=e=>{S.top=e.target.value;refresh(false)};
+$('topText').oninput=e=>{setTopName(e.target.value);const i=$('iTopName');if(i)i.value=e.target.value;refresh(false)};
 $('missionT').oninput=e=>{const v=parseFloat(e.target.value);const ok=v>0&&isFinite(v);e.target.classList.toggle('bad',!ok);
   if(ok){S.T=v;const d=$('iDer'),b=sel&&sel.t==='b'&&byId()[sel.id];if(d&&b)d.textContent=derivedLine(b);refresh(false)}};
 $('btnAdd').onclick=()=>{const n=S.blocks.length,id=uid();
-  S.blocks.push({id,name:'Block '+(n+1),mode:'rate',v:1e-5,x:30+(n*23)%300,y:30+(n*17)%200,st:'part',ccf:''});sel={t:'b',id};connect=false;pending=null;refresh(true);};
+  S.blocks.push({id,name:'Block '+n,mode:'rate',v:1e-5,x:30+(n*23)%300,y:30+(n*17)%200,st:'part',ccf:'',rep:'',kind:''});sel={t:'b',id};connect=false;pending=null;refresh(true);};
+$('btnFrame').onclick=()=>{const m=byId(),b=sel&&sel.t==='b'&&m[sel.id]&&!isTop(m[sel.id])?m[sel.id]:null,id=uid();
+  // a new frame wraps the selected block, or lands in the top-left corner
+  const f=b?{id,label:`Failure of ${b.name}`,x:clamp(b.x-16,0,CW-80),y:clamp(b.y-26,0,CH-60),w:W+32,h:H+42}
+    :{id,label:'Failure of subsystem',x:20,y:20,w:240,h:150};
+  S.frames.push(f);sel={t:'f',id};connect=false;pending=null;refresh(true);status('Frame added. Drag it over blocks, or drag its corner to resize.')};
 $('btnConnect').onclick=()=>{connect=!connect;pending=null;renderIBD()};
-$('btnDel').onclick=()=>{if(!sel)return;
-  if(sel.t==='b'){S.blocks=S.blocks.filter(b=>b.id!==sel.id);S.links=S.links.filter(l=>l.from!==sel.id&&l.to!==sel.id);if(S.top===sel.id)S.top=S.blocks[0]?.id;}
+function delSel(){if(!sel)return;
+  if(sel.t==='b'){if(isTop(byId()[sel.id])){status("The top event can't be deleted. Rename it, or connect other blocks to it.",true);return}
+    S.blocks=S.blocks.filter(b=>b.id!==sel.id);S.links=S.links.filter(l=>l.from!==sel.id&&l.to!==sel.id)}
+  else if(sel.t==='f')S.frames=S.frames.filter(f=>f.id!==sel.id);
   else S.links=S.links.filter(l=>l.id!==sel.id);
-  sel=null;refresh(true);};
+  sel=null;refresh(true);}
+$('btnDel').onclick=delSel;
+let clearArm=null;
+$('btnClear').onclick=()=>{const b=$('btnClear');
+  if(!clearArm){b.textContent='Confirm clear';clearArm=setTimeout(()=>{clearArm=null;b.textContent='Clear'},4000);
+    status('Click Confirm clear to remove every block, connection and frame. Save first if you want to keep your work.');return}
+  clearTimeout(clearArm);clearArm=null;b.textContent='Clear';
+  const top={...topNode(),name:'Top event',x:CW-W-40,y:Math.round(CH/2-H/2)};
+  S={T:S.T,ccf:{},vote:{},frames:[],blocks:[top],links:[],top:top.id,topText:top.name};
+  sel=null;connect=false;pending=null;clip=null;refresh(true);status('Canvas cleared. Add blocks and connect them to the top event.')};
 $('btnReset').onclick=()=>{S=example();sel=null;connect=false;pending=null;refresh(true);status('Example restored')};
+
+/* ---------- copy and paste ---------- */
+function copySel(){
+  const m=byId();let c=null;
+  if(sel&&sel.t==='b'&&m[sel.id]){if(isTop(m[sel.id])){status("The top event can't be copied.",true);return false}c={blocks:[m[sel.id]],links:[],frames:[]}}
+  else if(sel&&sel.t==='f'){const f=S.frames.find(f=>f.id===sel.id),bs=S.blocks.filter(b=>inFrame(f,b)&&!isTop(b)),ids=new Set(bs.map(b=>b.id));
+    c={frames:[f],blocks:bs,links:S.links.filter(l=>ids.has(l.from)&&ids.has(l.to))}}
+  if(!c){status('Select a block, or a frame to copy it with its blocks.',true);return false}
+  c.vote=Object.fromEntries(Object.entries(S.vote).filter(([k])=>c.blocks.some(b=>k.startsWith(b.id+'|'))));
+  clip=JSON.parse(JSON.stringify(c));clip.n=0;
+  status(c.frames.length?`Copied frame "${c.frames[0].label}" with ${c.blocks.length} block${c.blocks.length===1?'':'s'}`:`Copied ${c.blocks[0].name}`);return true}
+// cut = copy, then delete; a cut frame takes its blocks with it, and the first paste puts everything back where it was
+function cutSel(){
+  if(sel&&sel.t==='l'){delSel();status('Connection deleted');return}
+  if(!copySel())return;
+  if(sel.t==='f'){const ids=new Set(clip.blocks.map(b=>b.id));S.frames=S.frames.filter(f=>f.id!==sel.id);
+    S.blocks=S.blocks.filter(b=>!ids.has(b.id));S.links=S.links.filter(l=>!ids.has(l.from)&&!ids.has(l.to));sel=null;refresh(true)}
+  else delSel();
+  clip.n=-1;clip.cut=true;
+  status(`Cut ${clip.frames.length?`frame "${clip.frames[0].label}" with ${clip.blocks.length} block${clip.blocks.length===1?'':'s'}`:clip.blocks[0].name}. Press Ctrl+V to paste it back.`)}
+function paste(){
+  if(!clip){status('Nothing copied yet. Select a block or frame and press Copy.',true);return}
+  clip.n++;const off=24*clip.n,map={};
+  for(const b of clip.blocks){const id=uid();map[b.id]=id;S.blocks.push({...b,id,x:clamp(b.x+off,0,CW-W),y:clamp(b.y+off,8,CH-H)})}
+  for(const l of clip.links)S.links.push({...l,id:uid(),from:map[l.from],to:map[l.to]});
+  for(const[k,v]of Object.entries(clip.vote)){const[t,g]=k.split('|');if(map[t])S.vote[vkey(map[t],g)]=v}
+  let fid=null;for(const f of clip.frames){fid=uid();S.frames.push({...f,id:fid,label:clip.cut&&clip.n===0?f.label:f.label+' (copy)',x:clamp(f.x+off,0,CW-f.w),y:clamp(f.y+off,0,CH-f.h)})}
+  sel=fid?{t:'f',id:fid}:{t:'b',id:map[clip.blocks[0].id]};connect=false;pending=null;refresh(true);
+  const tagged=clip.blocks.some(b=>b.rep);
+  status(`Pasted ${clip.blocks.length} block${clip.blocks.length===1?'':'s'}. Copies are new, independent components`+(tagged?', except blocks with a shared failure event tag, which stay the same failure.':'. Rename them in the inspector.'))}
+$('btnCopy').onclick=copySel;$('btnPaste').onclick=paste;
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'){$('sheet').hidden=true;return}
+  const t=e.target;if(t&&(t.isContentEditable||/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)))return;
+  if(!$('sheet').hidden)return;
+  if((e.key==='Delete'||e.key==='Backspace')&&!e.ctrlKey&&!e.metaKey&&!e.altKey){if(sel){e.preventDefault();delSel()}return}
+  if(!(e.ctrlKey||e.metaKey)||e.altKey)return;const k=e.key.toLowerCase();
+  if(k==='c'&&sel){e.preventDefault();copySel()}else if(k==='x'&&sel){e.preventDefault();cutSel()}else if(k==='v'&&clip){e.preventDefault();paste()}
+  else if(k==='z'){e.preventDefault();step(!e.shiftKey)}else if(k==='y'){e.preventDefault();step(false)}});
 
 /* ---------- common cause (alpha factor) ---------- */
 function comb(n,k){let r=1;for(let i=1;i<=k;i++)r=r*(n-k+i)/i;return r}
 function defAlpha(m){const w=[];for(let k=2;k<=m;k++)w.push(1/(k-1));const s=w.reduce((a,b)=>a+b,0);return[0.95,...w.map(x=>+(0.05*x/s).toFixed(4))]}
-function repPrimary(){const r=new Map();for(const b of S.blocks)if(b.rep&&!r.has(b.rep))r.set(b.rep,b);return r}
+function repPrimary(){const r=new Map();for(const b of S.blocks)if(b.rep&&!isTop(b)&&!r.has(b.rep))r.set(b.rep,b);return r}
 const evKey=b=>b.rep?'rep:'+b.rep:b.id;
-function groupsOf(){const g=new Map(),pr=repPrimary();for(const b of S.blocks){const c=(b.ccf||'').trim();if(!c||(b.rep&&pr.get(b.rep)!==b))continue;if(!g.has(c))g.set(c,[]);g.get(c).push(b)}return g}
+function groupsOf(){const g=new Map(),pr=repPrimary();for(const b of S.blocks){const c=(b.ccf||'').trim();if(!c||isTop(b)||(b.rep&&pr.get(b.rep)!==b))continue;if(!g.has(c))g.set(c,[]);g.get(c).push(b)}return g}
 function alphasFor(g,m){let a=S.ccf[g];if(!Array.isArray(a)||a.length!==m){a=defAlpha(m);S.ccf[g]=a}return a}
 function model(){
   const ev={},ccfOf=new Map(),info={},be={},pr=repPrimary();
-  for(const b of S.blocks){const k=evKey(b);be[b.id]=k;if(!ev[k]){const src=b.rep?pr.get(b.rep):b;ev[k]={name:src.name,p:pb(src)}}}
+  for(const b of S.blocks){if(isTop(b))continue;const k=evKey(b);be[b.id]=k;if(!ev[k]){const src=b.rep?pr.get(b.rep):b;ev[k]={name:src.name,p:pb(src)}}}
   for(const[g,mem]of groupsOf()){const n=mem.length;if(n<2||n>6){info[g]={n,skip:true};continue}
     const a=alphasFor(g,n),sum=a.reduce((s,x)=>s+(+x||0),0)||1,al=a.map(x=>(+x||0)/sum);
     const at=al.reduce((s,x,i)=>s+(i+1)*x,0),Qt=mem.reduce((s,b)=>s+pb(b),0)/n;
@@ -457,7 +617,7 @@ function makeBDD(limit){
 function structure(M){
   const B=makeBDD(300000),m=byId(),ins=inputsOf(),memo=new Map(),stack=new Set();
   const lf=e=>M.ev[e].p>0?B.leaf(e):0;
-  const own=id=>{const k=M.be[id];return[k,...(M.ccfOf.get(k)||[])].reduce((a,e)=>B.or(a,lf(e)),0)};
+  const own=id=>{const k=M.be[id];if(!k)return 0;return[k,...(M.ccfOf.get(k)||[])].reduce((a,e)=>B.or(a,lf(e)),0)};
   function F(id){
     if(memo.has(id))return memo.get(id);if(stack.has(id)||!m[id])return 0;stack.add(id);
     let r=own(id);const groups=new Map();
@@ -466,7 +626,7 @@ function structure(M){
     for(const[g,mem]of groups)r=B.or(r,B.atleast(voteK(id,g,mem.length),mem.map(F)));
     stack.delete(id);memo.set(id,r);return r}
   const P=n=>B.prob(n,e=>M.ev[e].p);
-  return{B,F,own,P};
+  return{B,F,own,lf,P};
 }
 
 /* ---------- analysis ---------- */
@@ -486,7 +646,7 @@ function analyze(){
   const M=model(),ev=M.ev,m=byId(),ins=inputsOf(),memo=new Map(),stack=new Set();
   function cs(id){
     if(memo.has(id))return memo.get(id);if(stack.has(id)||!m[id])return[];stack.add(id);
-    const k=M.be[id];let sets=[[k],...(M.ccfOf.get(k)||[]).map(e=>[e])].filter(s=>ev[s[0]].p>0);const groups=new Map();
+    const k=M.be[id];let sets=k?[[k],...(M.ccfOf.get(k)||[]).map(e=>[e])].filter(s=>ev[s[0]].p>0):[];const groups=new Map();
     for(const l of ins.get(id)||[]){if(!m[l.from])continue;
       if(!l.group)sets=sets.concat(cs(l.from));else{if(!groups.has(l.group))groups.set(l.group,[]);groups.get(l.group).push(l.from)}}
     for(const[g,mem]of groups){const lists=mem.map(cs),k=voteK(id,g,mem.length);
@@ -508,57 +668,89 @@ function analyze(){
   return{rows,sum,P,exact,imp,spf,ev,M,St};
 }
 
-/* ---------- fault tree drawing ---------- */
+/* ---------- fault tree construction ---------- */
+/* Each node may carry f, its BDD, so every gate shows an exact probability.
+   Frames regroup branches for context only: OR and AND are associative, so the logic is unchanged. */
 function buildTree(M,St){
-  const m=byId(),ins=inputsOf(),drawn=new Set(),gp=f=>St?St.P(f()):null;
+  const m=byId(),ins=inputsOf(),drawn=new Set(),frames=S.frames;
+  const basic=(id,label,extra)=>Object.assign({k:'basic',id,label,p:M.ev[id].p,f:St?St.lf(id):null},extra);
+  const gate=(n,f)=>{n.f=St?f():null;n.p=St?St.P(n.f):null;return n};
+  const fold=(op,ch)=>()=>ch.reduce((a,c)=>op==='AND'?St.B.and(a,c.f):St.B.or(a,c.f),op==='AND'?1:0);
   function internal(b,label){
     const k=M.be[b.id],cc=M.ccfOf.get(k)||[];
-    const bn={k:'basic',id:k,label:cc.length?b.name+' independent failure':label,p:M.ev[k].p};
+    const bn=basic(k,cc.length?b.name+' independent failure':label);
     if(!cc.length)return bn;
-    return{k:'gate',g:'OR',label,p:gp(()=>St.own(b.id)),ch:[bn,...cc.map(e=>({k:'basic',id:e,label:M.ev[e].name,p:M.ev[e].p,ccf:true}))]};
+    return gate({k:'gate',g:'OR',label,ch:[bn,...cc.map(e=>basic(e,M.ev[e].name,{ccf:true}))]},()=>St.own(b.id));
   }
-  function node(id,stack,isTop){
-    const b=m[id];if(!b)return null;const inp=(ins.get(id)||[]).filter(l=>m[l.from]);
-    if(!inp.length&&!isTop)return internal(b,b.name+' fails');
+  // items: [{node, srcs}] feeding block X through a gate of type op. Items whose sources all sit in a frame
+  // that X is outside of are gathered under that frame's label (outermost frame first, then nested frames).
+  function group(items,X,op,used){
+    if(!frames.length)return items.map(i=>i.node);
+    const frameFor=it=>{let best=null;
+      for(const f of frames){if(used.has(f.id)||(it.node.fs&&it.node.fs.has(f.id))||inFrame(f,X))continue;
+        if(it.srcs.every(s=>m[s]&&inFrame(f,m[s]))&&(!best||f.w*f.h>best.w*best.h))best=f}return best};
+    const out=[],bucket=new Map();
+    items.forEach((it,i)=>{const f=frameFor(it);if(!f){out.push(it.node);return}
+      // a k-of-n vote can't be split into sub-gates, so each of its inputs is labelled separately
+      const key=op==='VOTE'?f.id+'#'+i:f.id;
+      if(!bucket.has(key)){const g={fr:f,list:[]};bucket.set(key,g);out.push(g)}bucket.get(key).list.push(it)});
+    return out.map(o=>{if(!o.fr)return o;const{fr:f,list}=o,u=new Set(used).add(f.id),inner=group(list,X,op,u);let n;
+      if(inner.length===1&&inner[0].k==='gate'){n=inner[0];n.sub=n.sub||n.label;n.label=f.label}
+      else if(inner.length===1)n=gate({k:'gate',g:'OR',label:f.label,ch:inner},fold('OR',inner));
+      else n=gate({k:'gate',g:op,label:f.label,ch:inner},fold(op,inner));
+      n.frame=true;n.fs=new Set([...(n.fs||[]),f.id]);return n})
+  }
+  function node(id,stack){
+    const b=m[id];if(!b)return null;const top=isTop(b),inp=(ins.get(id)||[]).filter(l=>m[l.from]);
+    if(!inp.length&&!top)return internal(b,b.name+' fails');
     if(stack.has(id))return null;
-    if(drawn.has(id))return{k:'xfer',bid:id,label:b.name+' output lost',p:gp(()=>St.F(id))};
-    drawn.add(id);const st=new Set(stack).add(id);
-    const ch=[internal(b,b.name+' internal failure')],groups=new Map();
-    for(const l of inp){if(!l.group){const n=node(l.from,st);if(n)ch.push(n)}else{if(!groups.has(l.group))groups.set(l.group,[]);groups.get(l.group).push(l.from)}}
-    for(const[g,mem]of groups){const c=mem.map(f=>node(f,st)).filter(Boolean),n=mem.length,vk=voteK(id,g,n);
-      if(!c.length)continue;
-      const p=gp(()=>St.B.atleast(vk,mem.map(St.F)));
-      if(c.length===1)ch.push(c[0]);
-      else if(vk>=n)ch.push({k:'gate',g:'AND',label:`All ${g} sources lost`,ch:c,p});
-      else if(vk===1)ch.push({k:'gate',g:'OR',label:`Any ${g} source lost`,ch:c,p});
-      else ch.push({k:'gate',g:'VOTE',vk,vn:n,label:`${vk} or more of ${n} ${g} lost`,ch:c,p});}
-    return{k:'gate',g:'OR',label:isTop?(S.topText||b.name+' output lost'):b.name+' output lost',ch,top:isTop,p:gp(()=>St.F(id))};
+    if(drawn.has(id))return gate({k:'xfer',bid:id,label:b.name+' output lost'},()=>St.F(id));
+    drawn.add(id);const st=new Set(stack).add(id),items=[],groups=new Map();
+    for(const l of inp){if(!l.group){const n=node(l.from,st);if(n)items.push({node:n,srcs:[l.from]})}
+      else{if(!groups.has(l.group))groups.set(l.group,[]);groups.get(l.group).push(l.from)}}
+    for(const[g,mem]of groups){const n=mem.length,vk=voteK(id,g,n),op=vk>=n?'AND':vk===1?'OR':'VOTE';
+      const its=mem.map(f=>({node:node(f,st),srcs:[f]})).filter(i=>i.node);if(!its.length)continue;
+      const c=group(its,b,op,new Set());
+      const gn=c.length===1?c[0]:gate({k:'gate',g:op,vk,vn:n,ch:c,
+        label:op==='AND'?`All ${g} sources lost`:op==='OR'?`Any ${g} source lost`:`${vk} or more of ${n} ${g} lost`},()=>St.B.atleast(vk,mem.map(St.F)));
+      items.push({node:gn,srcs:mem})}
+    const ch=(top?[]:[internal(b,b.name+' internal failure')]).concat(group(items,b,'OR',new Set()));
+    return gate({k:'gate',g:'OR',label:top?(b.name||'Top event'):b.name+' output lost',ch,bid:id,blk:!top,top},()=>St.F(id));
   }
-  const root=S.top?node(S.top,new Set(),true):null;
+  let root=S.top?node(S.top,new Set()):null;
+  if(root&&!root.ch.length)root=null;
+  // a top event with a single cause takes over that cause's gate, so the top box sits directly above the events beneath it
+  if(root&&root.ch.length===1&&root.ch[0].k==='gate'&&!root.ch[0].frame){const c=root.ch[0];Object.assign(root,{g:c.g,vk:c.vk,vn:c.vn,ch:c.ch,bid:c.bid,sub:c.label})}
   // repeated events: the same basic event drawn under more than one branch
   const uses=new Map();
   (function walk(n){if(!n)return;if(n.k==='basic')uses.set(n.id,(uses.get(n.id)||0)+1);(n.ch||[]).forEach(walk)})(root);
   (function mark(n){if(!n)return;if(n.k==='basic'&&uses.get(n.id)>1)n.rep=uses.get(n.id);(n.ch||[]).forEach(mark)})(root);
   return{root,repeated:[...uses].filter(([,c])=>c>1).map(([id])=>id)};
 }
-function wrap(t,n){const w=t.split(/\s+/),L=[];let c='';for(const x of w){if((c+' '+x).trim().length>n&&c){L.push(c);c=x}else c=(c+' '+x).trim()}if(c)L.push(c);
-  if(L.length>2){L.length=2;L[1]=L[1].slice(0,n-1)+'…'}return L}
-/* Layout shared by the on-page SVG and the PowerPoint export (units: px at 96 dpi) */
+
+/* ---------- fault tree drawing: layout shared by the on-page SVG and the PowerPoint export (px at 96 dpi) ---------- */
 const FT={NW:136,LH:112,PAD:16,BH:38};
 let lastTree=null;
 function layTree(root){let leaf=0,maxD=0;
-  (function lay(n,d){n.d=d;maxD=Math.max(maxD,d);if(n.k==='gate'){n.ch.forEach(c=>lay(c,d+1));n.x=(n.ch[0].x+n.ch.at(-1).x)/2}else n.x=leaf++})(root,0);
+  (function lay(n,d){n.d=d;maxD=Math.max(maxD,d);if(n.k==='gate'&&n.ch.length){n.ch.forEach(c=>lay(c,d+1));n.x=(n.ch[0].x+n.ch.at(-1).x)/2}else n.x=leaf++})(root,0);
   return{Wd:leaf*FT.NW+FT.PAD*2,Hd:(maxD+1)*FT.LH+FT.PAD}}
+// Transfers: the full branch and each △ pointing to it share a label T1, T2… numbered in drawing order
+function tagTransfers(root,key){const want=new Set(),ids=new Map();
+  (function w(n){if(n.k==='xfer')want.add(key(n));else(n.ch||[]).forEach(w)})(root);
+  (function w(n){if(n.k==='gate'){const k=key(n);if(k!=null&&want.has(k)&&!ids.has(k)){ids.set(k,'T'+(ids.size+1));n.tid=ids.get(k)}n.ch.forEach(w)}})(root);
+  (function w(n){if(n.k==='xfer')n.tid=ids.get(key(n));else(n.ch||[]).forEach(w)})(root)}
 const ftX=n=>FT.PAD+n.x*FT.NW+FT.NW/2,ftY=n=>FT.PAD+n.d*FT.LH;
 function drawTree(spf,M,St){
   const T=buildTree(M,St),root=T.root,ft=$('ft');
-  if(!root){lastTree=null;ft.setAttribute('viewBox','0 0 300 60');ft.style.maxWidth='300px';ft.style.aspectRatio='5';ft.dataset.w=300;ft.dataset.h=60;
-    ft.innerHTML=`<text class="ft-txt" x="16" y="34">Add a block and choose a top event.</text>`;return T}
+  if(!root){lastTree=null;ft.setAttribute('viewBox','0 0 420 60');ft.style.maxWidth='420px';ft.style.aspectRatio='7';ft.dataset.w=420;ft.dataset.h=60;
+    ft.innerHTML=`<text class="ft-txt" x="16" y="34">Connect blocks to the TOP EVENT node to generate the tree.</text>`;return T}
+  tagTransfers(root,n=>n.bid);
   const{Wd,Hd}=layTree(root);let o='';
   (function dr(n){const x=ftX(n),y=ftY(n),bw=FT.NW-14,s=n.k==='basic'&&spf.has(n.id),z=n.k==='basic'&&!(n.p>0);
     const lines=wrap(n.label,20);
-    o+=`<g${z?' class="ft-zero"':''}><title>${esc(n.label)}${n.p!=null?' · P = '+fmt(n.p):''}${n.rep?` · repeated ${n.rep}× in this tree, counted once`:''}</title><rect class="ft-box${n.top?' top':''}${s?' spf':''}" x="${x-bw/2}" y="${y}" width="${bw}" height="${FT.BH}" rx="3"/>`;
+    o+=`<g${z?' class="ft-zero"':''}><title>${esc(n.label)}${n.sub&&n.sub!==n.label?' ('+esc(n.sub)+')':''}${n.p!=null?' · P = '+fmt(n.p):''}${n.rep?` · repeated ${n.rep}× in this tree, counted once`:''}</title><rect class="ft-box${n.top?' top':''}${s?' spf':''}${n.frame&&!n.top?' frm':''}" x="${x-bw/2}" y="${y}" width="${bw}" height="${FT.BH}" rx="3"/>`;
     lines.forEach((t,i)=>o+=`<text class="ft-txt${n.top?' b':''}" x="${x}" y="${y+(lines.length===1?23:16+i*13)}" text-anchor="middle">${esc(t)}</text>`);
+    if(n.tid&&n.k==='gate')o+=`<text class="ft-tid" x="${x+bw/2}" y="${y-4}" text-anchor="end">${n.tid}<title>Transfer ${n.tid}: drawn in full here, and as △ ${n.tid} elsewhere</title></text>`;
     const y0=y+42;o+=`<line class="ft-wire" x1="${x}" y1="${y+FT.BH}" x2="${x}" y2="${y0}"/>`;
     if(n.k==='gate'){
       o+=n.g!=='AND'?`<path class="ft-gate" d="M${x-15},${y0+24} Q${x-15},${y0+7} ${x},${y0} Q${x+15},${y0+7} ${x+15},${y0+24} Q${x},${y0+16} ${x-15},${y0+24}Z"/>`
@@ -572,7 +764,7 @@ function drawTree(spf,M,St){
       o+=`<circle class="ft-basic${n.ccf?' ccf':''}${s?' spf':''}${n.rep?' rep':''}" cx="${x}" cy="${y0+12}" r="12"/><text class="ft-p" x="${x}" y="${y0+40}" text-anchor="middle">${fmt(n.p)}</text>`+
         (n.rep?`<text class="ft-rep" x="${x+16}" y="${y0+6}">R×${n.rep}</text>`:'')+`</g>`;
     }else{
-      o+=`<path class="ft-xfer" d="M${x},${y0} L${x+14},${y0+24} L${x-14},${y0+24}Z"/><text class="ft-xtxt" x="${x}" y="${y0+40}" text-anchor="middle">see above</text></g>`;
+      o+=`<path class="ft-xfer" d="M${x},${y0} L${x+14},${y0+24} L${x-14},${y0+24}Z"/><text class="ft-xtxt" x="${x}" y="${y0+40}" text-anchor="middle">${n.tid||''}<title>Transfer ${n.tid||''}: same branch as the box tagged ${n.tid||''}, drawn in full elsewhere</title></text></g>`;
     }})(root);
   // Fit: scale to the panel width (never above natural size) and cap height to the viewport, so the whole tree is visible without scrolling
   ft.setAttribute('viewBox',`0 0 ${Wd} ${Hd}`);ft.removeAttribute('width');ft.removeAttribute('height');
@@ -586,65 +778,68 @@ let pptxP=null;
 const loadPptx=()=>pptxP||(pptxP=new Promise((res,rej)=>{if(window.PptxGenJS)return res(window.PptxGenJS);
   const sc=document.createElement('script');sc.src='https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js';
   sc.onload=()=>window.PptxGenJS?res(window.PptxGenJS):rej(new Error('PptxGenJS missing'));sc.onerror=()=>{pptxP=null;rej(new Error('load failed'))};document.head.appendChild(sc)}));
-const PC={ink:'16202B',muted:'5B6774',line:'8995A3',sunk:'EEF0F2',lblLine:'CDD3DA',accent:'B45309',accentSoft:'FBEAD6',crit:'B42318',critSoft:'FDE7E4',flow:'2F5D8A',white:'FFFFFF'};
+const PC={ink:'16202B',muted:'5B6774',line:'8995A3',sunk:'EEF0F2',lblLine:'CDD3DA',accent:'B45309',accentSoft:'FBEAD6',crit:'B42318',critSoft:'FDE7E4',flow:'2F5D8A',flowSoft:'F3F6FA',white:'FFFFFF'};
 async function ibdPptx(){
-  if(!S.blocks.length)throw new Error('no blocks');
-  const Pptx=await loadPptx(),pres=new Pptx(),m=byId(),C=PC,F='Arial',MONO='Courier New';
-  // crop to the blocks' bounding box, with room for the TOP tag and connection curves
-  const bx=Math.max(0,Math.min(...S.blocks.map(b=>b.x))-24),by=Math.max(0,Math.min(...S.blocks.map(b=>b.y))-24);
-  const cw=Math.max(...S.blocks.map(b=>b.x+W))+24-bx,ch=Math.max(...S.blocks.map(b=>b.y+H))+24-by;
+  const Pptx=await loadPptx(),pres=new Pptx(),m=byId(),C=PC,F='Arial',MONO='Courier New',R=routes();
+  // crop to the bounding box of blocks and frames, with room for tags and connection curves
+  const boxes=[...S.blocks.map(b=>[b.x,b.y,b.x+W,b.y+H]),...S.frames.map(f=>[f.x,f.y,f.x+f.w,f.y+f.h])];
+  const bx=Math.max(0,Math.min(...boxes.map(q=>q[0]))-24),by=Math.max(0,Math.min(...boxes.map(q=>q[1]))-24);
+  const cw=Math.max(...boxes.map(q=>q[2]))+24-bx,ch=Math.max(...boxes.map(q=>q[3]))+24-by;
   const SW=13.333,SH=7.5,TITLE=0.9,MARGIN=0.3;
   const k=Math.min(1.25,(SW-2*MARGIN)/(cw/96),(SH-TITLE-2*MARGIN)/(ch/96));
   const u=v=>v/96*k,ox=(SW-u(cw))/2,oy=TITLE+MARGIN+(SH-TITLE-2*MARGIN-u(ch))/2,X=v=>ox+u(v-bx),Y=v=>oy+u(v-by),pt=px=>Math.max(4,px*.75*k),SH_=pres.ShapeType;
   pres.layout='LAYOUT_WIDE';pres.title='System architecture';
   const slide=pres.addSlide();slide.background={color:C.white};
   slide.addText([{text:'System architecture · internal block diagram',options:{fontSize:20,bold:true,color:C.ink,breakLine:true}},
-    {text:`${S.blocks.length} blocks · ${S.links.length} connections · top event: ${S.topText||'—'} (loss of ${m[S.top]?.name||'?'} output) · mission ${mT()} h`,options:{fontSize:11,color:C.muted}}],
+    {text:`${S.blocks.length-1} blocks · ${S.links.length} connections · top event: ${S.topText||'—'} · mission ${mT()} h`,options:{fontSize:11,color:C.muted}}],
     {x:MARGIN,y:0.15,w:SW-2*MARGIN,h:TITLE-0.1,fontFace:F,valign:'top',margin:0});
-  // connections first, so blocks sit on top
-  for(const l of S.links){const a=m[l.from],b=m[l.to];if(!a||!b)continue;const g=bezier(a,b);
-    const dx=Math.max(40,Math.abs(g.tx-g.sx)/2),P=[[g.sx,g.sy],[g.sx+dx,g.sy],[g.tx-dx,g.ty],[g.tx-2,g.ty]];
+  for(const f of S.frames){
+    slide.addShape(SH_.roundRect,{x:X(f.x),y:Y(f.y),w:u(f.w),h:u(f.h),rectRadius:u(6),fill:{color:C.flowSoft},line:{color:C.flow,width:Math.max(.5,1.2*.75*k),dashType:'dash'}});
+    slide.addText(f.label,{x:X(f.x),y:Y(f.y),w:u(f.w),h:u(18),fontFace:F,fontSize:pt(11),bold:true,color:C.flow,align:'left',valign:'middle',margin:pt(6)});}
+  // connections before blocks, so blocks sit on top
+  for(const r of R.values()){const l=r.l,P=[[r.sx,r.sy],r.c1,r.c2,r.e];
     const x0=Math.min(...P.map(q=>q[0])),y0=Math.min(...P.map(q=>q[1])),x1=Math.max(...P.map(q=>q[0])),y1=Math.max(...P.map(q=>q[1]));
-    const r=q=>({x:u(q[0]-x0),y:u(q[1]-y0)});
+    const q=v=>({x:u(v[0]-x0),y:u(v[1]-y0)});
     slide.addShape(SH_.custGeom,{x:X(x0),y:Y(y0),w:Math.max(.01,u(x1-x0)),h:Math.max(.01,u(y1-y0)),
-      points:[r(P[0]),Object.assign(r(P[3]),{curve:{type:'cubic',x1:r(P[1]).x,y1:r(P[1]).y,x2:r(P[2]).x,y2:r(P[2]).y}})],
+      points:[q(P[0]),Object.assign(q(P[3]),{curve:{type:'cubic',x1:q(P[1]).x,y1:q(P[1]).y,x2:q(P[2]).x,y2:q(P[2]).y}})],
       line:{color:C.flow,width:Math.max(.5,1.6*.75*k),dashType:l.group?'dash':'solid',endArrowType:'triangle'}});
-    for(const[px,py]of[[g.sx,g.sy],[g.tx,g.ty]])slide.addShape(SH_.rect,{x:X(px-4),y:Y(py-4),w:u(8),h:u(8),fill:{color:C.white},line:{color:C.line,width:Math.max(.5,.9*k)}});
-    const t=linkText(l);if(t){const w=t.length*6.4+10,mid=g.mid;
+    for(const[px,py]of[[r.sx,r.sy],[r.tx,r.ty]])slide.addShape(SH_.rect,{x:X(px-3.5),y:Y(py-3.5),w:u(7),h:u(7),fill:{color:C.white},line:{color:C.line,width:Math.max(.5,.9*k)}});
+    const t=linkText(l);if(t){const w=t.length*6.4+10,mid=r.mid;
       slide.addText(t,{shape:SH_.roundRect,rectRadius:u(3),x:X(mid[0]-w/2),y:Y(mid[1]-9),w:u(w),h:u(17),fontFace:MONO,fontSize:pt(10.5),color:C.flow,align:'center',valign:'middle',margin:0,
         fill:{color:C.sunk},line:{color:C.lblLine,width:.5}});}}
-  for(const b of S.blocks){const top=S.top===b.id;
+  for(const b of S.blocks){
+    if(isTop(b)){slide.addText([{text:'TOP EVENT',options:{fontFace:MONO,fontSize:pt(9.5),bold:true,color:C.accent,breakLine:true}},
+        {text:b.name||'Top event',options:{fontFace:F,fontSize:pt(12.5),bold:true,color:C.ink}}],
+        {shape:SH_.roundRect,rectRadius:u(14),x:X(b.x),y:Y(b.y),w:u(W),h:u(H),align:'center',valign:'middle',margin:pt(4),fill:{color:C.accentSoft},line:{color:C.accent,width:Math.max(.5,2*.75*k)}});continue}
     slide.addText([{text:'«'+(b.st||'part')+'»',options:{fontFace:MONO,fontSize:pt(10),color:C.muted,breakLine:true}},
       {text:b.name,options:{fontFace:F,fontSize:pt(Math.max(8,Math.min(13,(W-16)/(b.name.length*.62)))),bold:true,color:C.ink,breakLine:true}},
       {text:rateText(b),options:{fontFace:MONO,fontSize:pt(10.5),color:C.muted}}],
-      {shape:SH_.rect,x:X(b.x),y:Y(b.y),w:u(W),h:u(H),align:'left',valign:'middle',margin:pt(6),fill:{color:C.white},
-        line:{color:top?C.accent:C.line,width:Math.max(.5,(top?2:1.2)*.75*k)}});
+      {shape:SH_.rect,x:X(b.x),y:Y(b.y),w:u(W),h:u(H),align:'left',valign:'middle',margin:pt(6),fill:{color:C.white},line:{color:C.line,width:Math.max(.5,1.2*.75*k)}});
     if(b.rep)slide.addText('≡ '+b.rep,{x:X(b.x+2),y:Y(b.y-15),w:u(W-40),h:u(12),fontFace:MONO,fontSize:pt(9.5),bold:true,color:C.flow,align:'left',valign:'middle',margin:0});
-    if(b.ccf)slide.addText('CCF·'+b.ccf,{x:X(b.x+W-70),y:Y(b.y+3),w:u(64),h:u(12),fontFace:MONO,fontSize:pt(9.5),bold:true,color:C.flow,align:'right',valign:'middle',margin:0});
-    if(top)slide.addText('TOP',{shape:SH_.rect,x:X(b.x+W-34),y:Y(b.y-8),w:u(34),h:u(15),fontFace:MONO,fontSize:pt(9.5),bold:true,color:C.white,align:'center',valign:'middle',margin:0,fill:{color:C.accent},line:{color:C.accent,width:.5}});}
-  slide.addNotes('Generated by Fault Tree Workbench. Blocks, connections (with arrowheads), ports and flow labels are separate editable shapes. Dashed connections are redundancy groups; ≡ TAG above a block marks a shared failure event (blocks with the same tag are one physical failure); k/n on a label means the group is lost when k of its n inputs are lost.');
+    if(b.ccf)slide.addText('CCF·'+b.ccf,{x:X(b.x+W-70),y:Y(b.y+3),w:u(64),h:u(12),fontFace:MONO,fontSize:pt(9.5),bold:true,color:C.flow,align:'right',valign:'middle',margin:0});}
+  slide.addNotes('Generated by Fault Tree Workbench. Blocks, frames, connections (with arrowheads), ports and flow labels are separate editable shapes. Dashed connections are redundancy groups; k/n on a label means the group is lost when k of its n inputs are lost. ≡ TAG above a block marks a shared failure event (blocks with the same tag are one physical failure). Dashed frames group blocks under a labelled event in the fault tree.');
   return pres.write({outputType:'arraybuffer'});
 }
 async function ftPptx(){
   const L=lastTree;if(!L)throw new Error('no tree');
   const Pptx=await loadPptx(),pres=new Pptx(),A=analyze();
   const MAX=56,TITLE=0.9,MARGIN=0.3;          // PowerPoint's largest slide side is 56 in
-  let k=Math.min(1,(MAX-2*MARGIN)/(L.Wd/96),(MAX-TITLE-2*MARGIN)/(L.Hd/96));
+  const k=Math.min(1,(MAX-2*MARGIN)/(L.Wd/96),(MAX-TITLE-2*MARGIN)/(L.Hd/96));
   const tw=L.Wd/96*k,th=L.Hd/96*k,SW=Math.max(13.333,tw+2*MARGIN),SH=Math.max(7.5,th+TITLE+2*MARGIN);
   pres.defineLayout({name:'FT',width:SW,height:SH});pres.layout='FT';pres.title=S.topText||'Fault tree';
   const ox=(SW-tw)/2,oy=TITLE+MARGIN,u=v=>v/96*k,X=v=>ox+u(v),Y=v=>oy+u(v),pt=px=>Math.max(4,px*0.75*k);
   const slide=pres.addSlide();slide.background={color:'FFFFFF'};
-  const C=PC;
-  const F='Arial',SH_=pres.ShapeType;
+  const C=PC,F='Arial',SH_=pres.ShapeType;
   slide.addText([{text:'Fault tree · '+(S.topText||'top event'),options:{fontSize:20,bold:true,color:C.ink,breakLine:true}},
     {text:`P(top) = ${fmt(A.P)} per ${mT()} h mission · ${A.exact?'exact (BDD, repeated events counted once)':'rare-event approximation'} · ${A.rows.length} minimal cut sets`,options:{fontSize:11,color:C.muted}}],
     {x:MARGIN,y:0.15,w:SW-2*MARGIN,h:TITLE-0.1,fontFace:F,valign:'top',margin:0});
   const wire=(x1,y1,x2,y2)=>slide.addShape(SH_.line,{x:X(Math.min(x1,x2)),y:Y(Math.min(y1,y2)),w:u(Math.abs(x2-x1)),h:u(Math.abs(y2-y1)),line:{color:C.line,width:Math.max(.5,1.1*.75*k)}});
   const txt=(t,x,y,w,h,o)=>slide.addText(t,Object.assign({x:X(x),y:Y(y),w:u(w),h:u(h),fontFace:F,margin:0,align:'center',valign:'middle'},o));
   const stroke=w=>Math.max(.5,w*.75*k);
-  (function dr(n){const x=ftX(n),y=ftY(n),bw=FT.NW-14,s=n.k==='basic'&&L.spf.has(n.id),z=n.k==='basic'&&!(n.p>0),tr=z?50:0;
+  (function dr(n){const x=ftX(n),y=ftY(n),bw=FT.NW-14,s=n.k==='basic'&&L.spf.has(n.id),z=n.k==='basic'&&!(n.p>0),tr=z?50:0,fr=n.frame&&!n.top;
     slide.addText(wrap(n.label,20).join('\n'),{shape:SH_.rect,x:X(x-bw/2),y:Y(y),w:u(bw),h:u(FT.BH),fontFace:F,fontSize:pt(11),bold:!!n.top,color:C.ink,align:'center',valign:'middle',margin:0,
-      fill:{color:n.top?C.accentSoft:s?C.critSoft:C.white,transparency:tr},line:{color:n.top?C.accent:s?C.crit:C.line,width:stroke(n.top?2:s?1.6:1),transparency:tr}});
+      fill:{color:n.top?C.accentSoft:s?C.critSoft:fr?C.flowSoft:C.white,transparency:tr},line:{color:n.top?C.accent:s?C.crit:fr?C.flow:C.line,width:stroke(n.top?2:s?1.6:fr?1.5:1),transparency:tr}});
+    if(n.tid&&n.k==='gate')txt(n.tid,x+bw/2-40,y-15,40,12,{fontSize:pt(10),bold:true,color:C.flow,align:'right',fontFace:'Courier New'});
     const y0=y+42;wire(x,y+FT.BH,x,y0);
     if(n.k==='gate'){
       const sx=u(1),pts=n.g!=='AND'
@@ -664,9 +859,9 @@ async function ftPptx(){
       if(n.rep)txt('R×'+n.rep,x+15,y0-2,34,12,{fontSize:pt(9.5),bold:true,color:C.flow,align:'left',fontFace:'Courier New'});
     }else{
       slide.addShape(SH_.triangle,{x:X(x-14),y:Y(y0),w:u(28),h:u(24),fill:{color:C.white},line:{color:C.flow,width:stroke(1.3)}});
-      txt('see above',x-40,y0+30,80,13,{fontSize:pt(10),color:C.flow,fontFace:'Courier New'});
+      txt(n.tid||'',x-40,y0+30,80,13,{fontSize:pt(10),color:C.flow,fontFace:'Courier New'});
     }})(L.root);
-  slide.addNotes('Generated by Fault Tree Workbench. Every box, gate, event and wire is a separate editable shape. R×n marks a basic event that appears n times in the tree; it is counted once in all probabilities.');
+  slide.addNotes('Generated by Fault Tree Workbench. Every box, gate, event and wire is a separate editable shape. Blue boxes are frame labels from the block diagram. R×n marks a basic event that appears n times in the tree; it is counted once in all probabilities.');
   return pres.write({outputType:'arraybuffer'});
 }
 
@@ -707,18 +902,19 @@ $('ccfSect').addEventListener('input',e=>{const t=e.target;if(t.dataset.g==null)
 
 /* ---------- export ---------- */
 const EXPORT_CSS=`text{font-family:"IBM Plex Sans",Arial,sans-serif}
-.blk rect.body{fill:#fff;stroke:#8995a3;stroke-width:1.2}.blk.top rect.body{stroke:#b45309;stroke-width:2}
+.blk rect.body{fill:#fff;stroke:#8995a3;stroke-width:1.2}.blk.topev rect.body{fill:#fbead6;stroke:#b45309;stroke-width:2}
 .blk .name{font:600 13px "IBM Plex Sans",Arial,sans-serif;fill:#16202b}.blk .rate,.blk .stereo{font:10.5px "IBM Plex Mono",Menlo,monospace;fill:#5b6774}
-.blk .toptag{font:600 9.5px "IBM Plex Mono",Menlo,monospace;fill:#fff}.blk .toptagbg{fill:#b45309}.blk .ccftag{font:600 9.5px "IBM Plex Mono",Menlo,monospace;fill:#2f5d8a}
+.blk .toptag2{font:600 9.5px "IBM Plex Mono",Menlo,monospace;fill:#b45309;letter-spacing:.08em}.blk .tename{font:600 12.5px "IBM Plex Sans",Arial,sans-serif;fill:#16202b}
+.blk .ccftag,.blk .reptag{font:600 9.5px "IBM Plex Mono",Menlo,monospace;fill:#2f5d8a}
+.frm-body{fill:#2f5d8a;fill-opacity:.04;stroke:#2f5d8a;stroke-width:1.2;stroke-dasharray:5 4}.frm-tab{fill:#fff;stroke:#2f5d8a}.frm-lbl{font:600 11px "IBM Plex Sans",Arial,sans-serif;fill:#2f5d8a}.frm-rs{display:none}
 .port{fill:#fff;stroke:#8995a3;stroke-width:1.2}.link{fill:none;stroke:#2f5d8a;stroke-width:1.6}.link.grp{stroke-dasharray:6 4}.linkhit{display:none}
 .lbl-bg{fill:#eef0f2;stroke:#cdd3da}.lbl{font:10.5px "IBM Plex Mono",Menlo,monospace;fill:#2f5d8a}#arrowhead path{fill:#2f5d8a}
-.ft-box{fill:#fff;stroke:#8995a3;stroke-width:1}.ft-box.top{stroke:#b45309;stroke-width:2;fill:#fbead6}.ft-box.spf{stroke:#b42318;stroke-width:1.6;fill:#fde7e4}
+.ft-box{fill:#fff;stroke:#8995a3;stroke-width:1}.ft-box.top{stroke:#b45309;stroke-width:2;fill:#fbead6}.ft-box.spf{stroke:#b42318;stroke-width:1.6;fill:#fde7e4}.ft-box.frm{stroke:#2f5d8a;stroke-width:1.5;fill:#f3f6fa}
 .ft-txt{font:11px "IBM Plex Sans",Arial,sans-serif;fill:#16202b}.ft-txt.b{font-weight:600}.ft-gate,.ft-basic{fill:#fff;stroke:#16202b;stroke-width:1.3}
 .ft-gname{font:600 8.5px "IBM Plex Mono",Menlo,monospace;fill:#16202b}.ft-basic.ccf{stroke:#2f5d8a;stroke-dasharray:3 2}.ft-basic.spf{stroke:#b42318;fill:#fde7e4}
 .ft-zero{opacity:.45}.ft-p{font:10px "IBM Plex Mono",Menlo,monospace;fill:#5b6774}.ft-wire{fill:none;stroke:#8995a3;stroke-width:1.1}
 .ft-xfer{fill:#fff;stroke:#2f5d8a;stroke-width:1.3}.ft-xtxt{font:10px "IBM Plex Mono",Menlo,monospace;fill:#2f5d8a}
-.ft-gp{font:10px "IBM Plex Mono",Menlo,monospace;fill:#b45309}.ft-basic.rep{stroke-width:2.4}.ft-rep{font:600 9.5px "IBM Plex Mono",Menlo,monospace;fill:#2f5d8a}
-.blk .reptag{font:600 9.5px "IBM Plex Mono",Menlo,monospace;fill:#2f5d8a}`;
+.ft-gp{font:10px "IBM Plex Mono",Menlo,monospace;fill:#b45309}.ft-tid{font:600 10px "IBM Plex Mono",Menlo,monospace;fill:#2f5d8a}.ft-basic.rep{stroke-width:2.4}.ft-rep{font:600 9.5px "IBM Plex Mono",Menlo,monospace;fill:#2f5d8a}`;
 function svgExport(el,w,h){
   const c=el.cloneNode(true);c.removeAttribute('id');c.removeAttribute('style');c.setAttribute('xmlns','http://www.w3.org/2000/svg');
   c.setAttribute('width',w);c.setAttribute('height',h);
@@ -730,7 +926,7 @@ function svgExport(el,w,h){
   return'<?xml version="1.0" encoding="UTF-8"?>\n'+new XMLSerializer().serializeToString(c);
 }
 function ibdSvg(){
-  const xs=S.blocks.map(b=>b.x+W),ys=S.blocks.map(b=>b.y+H);
+  const xs=[...S.blocks.map(b=>b.x+W),...S.frames.map(f=>f.x+f.w)],ys=[...S.blocks.map(b=>b.y+H),...S.frames.map(f=>f.y+f.h)];
   const w=Math.max(400,...xs)+24,h=Math.max(200,...ys)+24;
   const c=$('ibd').cloneNode(true);c.setAttribute('viewBox',`0 -12 ${w} ${h+12}`);
   return svgExport(c,w,h+12);
@@ -741,22 +937,23 @@ function ident(s,used){let x=String(s).replace(/[^A-Za-z0-9_]/g,'_').replace(/_+
 const real=v=>v>0?v.toExponential(4).toUpperCase().replace('E+0','E0'):'0.0';
 const sstr=s=>'"'+String(s).replace(/\\/g,'\\\\').replace(/"/g,'\\"')+'"';
 function toSysML(){
-  const m=byId(),used=new Set(['Real','String','FTW_Model']),inst=new Set(),defN={},instN={},flowN={},port={};
+  const m=byId(),used=new Set(['Real','String','Boolean','FTW_Model']),inst=new Set(),defN={},instN={},flowN={},port={};
   const L=[];
   for(const l of S.links){const f=l.flow||'signal';if(!flowN[f])flowN[f]=ident('F_'+f,used)}
-  for(const b of S.blocks){defN[b.id]=ident(b.name.replace(/\s+(\w)/g,(_,c)=>c.toUpperCase()).replace(/^\w/,c=>c.toUpperCase()),used);
+  for(const b of S.blocks){defN[b.id]=ident((isTop(b)?'TopEvent ':'')+b.name.replace(/\s+(\w)/g,(_,c)=>c.toUpperCase()).replace(/^\w/,c=>c.toUpperCase()),used);
     instN[b.id]=ident(defN[b.id].replace(/^[A-Z]+(?=[A-Z][a-z]|$)|^[A-Z]/,c=>c.toLowerCase()),inst);port[b.id]=[]}
   S.links.forEach((l,i)=>{const f=flowN[l.flow||'signal'];port[l.from].push(`port o${i+1} : P_${f};`);port[l.to].push(`port i${i+1} : ~P_${f};`)});
   L.push(`/* Generated by Fault Tree Workbench. Layout data for reloading: ft-layout:${b64e(JSON.stringify(S))} */`);
   L.push('package FTW_Model {','  private import ScalarValues::*;','');
-  L.push(`  doc /* Top event: ${String(S.topText).replace(/\*\//g,'')} (loss of ${m[S.top]?.name||'?'} output). Mission time ${S.T} h. */`,'');
+  L.push(`  doc /* Top event: ${String(S.topText).replace(/\*\//g,'')}. Mission time ${S.T} h. */`,'');
   for(const[f,n]of Object.entries(flowN)){L.push(`  item def ${n};   // flow: ${f}`,`  port def P_${n} { out item payload : ${n}; }`)}
   L.push('');
   for(const b of S.blocks){
-    L.push(`  part def ${defN[b.id]} {   // «${b.st||'part'}»`);
-    L.push(b.mode==='prob'?`    attribute fixedFailureProbability : Real = ${real(b.v)};`:`    attribute failureRate : Real = ${real(b.v)};   // per hour`);
-    if(b.ccf)L.push(`    attribute commonCauseGroup : String = ${sstr(b.ccf)};`);
-    if(b.rep)L.push(`    attribute sharedFailureEvent : String = ${sstr(b.rep)};`);
+    if(isTop(b)){L.push(`  part def ${defN[b.id]} {   // top event, not a component`,`    attribute isTopEvent : Boolean = true;`,`    attribute undesiredEvent : String = ${sstr(b.name)};`)}
+    else{L.push(`  part def ${defN[b.id]} {   // «${b.st||'part'}»`);
+      L.push(b.mode==='prob'?`    attribute fixedFailureProbability : Real = ${real(b.v)};`:`    attribute failureRate : Real = ${real(b.v)};   // per hour`);
+      if(b.ccf)L.push(`    attribute commonCauseGroup : String = ${sstr(b.ccf)};`);
+      if(b.rep)L.push(`    attribute sharedFailureEvent : String = ${sstr(b.rep)};`);}
     for(const g of new Set(S.links.filter(l=>l.to===b.id&&l.group).map(l=>l.group))){const n=groupSize(b.id,g),k=voteK(b.id,g,n);
       if(n>1&&k<n)L.push(`    attribute lossThreshold_${String(g).replace(/[^A-Za-z0-9_]/g,'_')} : Integer = ${k};   // group ${g.replace(/\*\//g,'')} lost when ${k} of ${n} inputs lost`);}
     for(const p of port[b.id])L.push('    '+p);
@@ -766,38 +963,38 @@ function toSysML(){
   S.links.forEach((l,i)=>{const c=`connect ${instN[l.from]}.o${i+1} to ${instN[l.to]}.i${i+1}`;
     L.push(l.group?`    connection c${i+1} ${c} {\n      attribute redundancyGroup : String = ${sstr(l.group)};\n    }`:`    connection c${i+1} ${c};`)});
   for(const[g,a]of Object.entries(S.ccf))if(groupsOf().has(g))L.push(`    // CCF group ${g}: alpha = [${a.join(', ')}]`);
+  for(const f of S.frames)L.push(`    // frame ${sstr(f.label)} contains: ${S.blocks.filter(b=>inFrame(f,b)).map(b=>instN[b.id]).join(', ')||'nothing'}`);
   L.push('  }','}');
   return L.join('\n')+'\n';
 }
+/* Open-PSA MEF, written from the generated tree, so frame labels and group gates carry over to other tools and to the Fault Tree Editor */
 function toOpenPSA(){
-  const M=model(),m=byId(),ins=inputsOf(),stack=new Set(),done=new Set(),gates=[],usedEv=new Set();
-  const x=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-  const used=new Set(),gN={},eN={};
-  const gname=id=>gN[id]||(gN[id]=ident('G_'+m[id].name+'_lost',used));
-  const ename=id=>eN[id]||(eN[id]=ident('E_'+M.ev[id].name.replace('CCF ','CCF_'),used));
-  const beRef=id=>{usedEv.add(id);return`<basic-event name="${ename(id)}"/>`};
-  function gate(id){
-    if(done.has(id))return true;if(stack.has(id))return false;stack.add(id);
-    const k=M.be[id],args=[beRef(k),...(M.ccfOf.get(k)||[]).map(beRef)],groups=new Map();
-    for(const l of ins.get(id)||[]){if(!m[l.from])continue;
-      if(!l.group){if(gate(l.from))args.push(`<gate name="${gname(l.from)}"/>`)}
-      else{if(!groups.has(l.group))groups.set(l.group,[]);groups.get(l.group).push(l.from)}}
-    for(const[g,mem]of groups){const r=mem.filter(f=>gate(f)).map(f=>`<gate name="${gname(f)}"/>`),k=voteK(id,g,mem.length);
-      if(r.length===mem.length&&r.length)args.push(r.length===1?r[0]:k>=r.length?`<and>${r.join('')}</and>`:k===1?`<or>${r.join('')}</or>`:`<atleast min="${k}">${r.join('')}</atleast>`)}
-    const label=id===S.top?(S.topText||m[id].name+' output lost'):m[id].name+' output lost';
-    gates.push(`    <define-gate name="${gname(id)}">\n      <label>${x(label)}</label>\n      ${args.length===1?args[0]:`<or>${args.join('')}</or>`}\n    </define-gate>`);
-    stack.delete(id);done.add(id);return true;
+  const A=analyze(),T=buildTree(A.M,null),M=A.M,x=esc;
+  const used=new Set(),gN=new Map(),eN=new Map(),gates=[],evs=new Set();let anon=0;
+  const gname=(key,label)=>{if(!gN.has(key))gN.set(key,ident('G_'+label,used));return gN.get(key)};
+  const ename=id=>{if(!eN.has(id))eN.set(id,ident('E_'+M.ev[id].name.replace('CCF ','CCF_'),used));return eN.get(id)};
+  function ref(n){
+    if(n.k==='basic'){evs.add(n.id);return`<basic-event name="${ename(n.id)}"/>`}
+    if(n.k==='xfer')return`<gate name="${gname('b:'+n.bid,n.label)}"/>`;
+    const name=gname(n.bid?'b:'+n.bid:'g'+(++anon),(n.top?'TOP_':'')+n.label),idx=gates.push('')-1;
+    const args=n.ch.map(ref),op=n.g==='AND'?'and':n.g==='VOTE'?'atleast':'or';
+    const f=args.length===1?args[0]:`<${op}${op==='atleast'?` min="${n.vk}"`:''}>${args.join('')}</${op}>`;
+    const kind=n.top?'top':n.frame?'frame':n.blk?'block':'group';
+    gates[idx]=`    <define-gate name="${name}">\n      <label>${x(n.label)}</label>\n      <attributes><attribute name="ftw-kind" value="${kind}"/></attributes>\n      ${f}\n    </define-gate>`;
+    return`<gate name="${name}"/>`;
   }
-  if(S.top)gate(S.top);
-  const evs=[...usedEv].map(id=>`    <define-basic-event name="${ename(id)}">\n      <label>${x(M.ev[id].name)}</label>\n      <float value="${M.ev[id].p}"/>\n    </define-basic-event>`);
+  const top=T.root?ref(T.root).match(/name="([^"]+)"/)[1]:'none';
+  const defs=[...evs].map(id=>`    <define-basic-event name="${ename(id)}">\n      <label>${x(M.ev[id].name)}</label>\n`+
+    (M.ev[id].ccf?`      <attributes><attribute name="ftw-ccf" value="true"/></attributes>\n`:'')+`      <float value="${M.ev[id].p}"/>\n    </define-basic-event>`);
   return`<?xml version="1.0" encoding="UTF-8"?>
-<!-- Generated by Fault Tree Workbench. Top gate: ${S.top?gname(S.top):'none'}. Probabilities are per ${S.T} h mission (rates converted with P = 1 - exp(-lambda*T)); common-cause events use the alpha-factor model. -->
+<!-- Generated by Fault Tree Workbench. Top gate: ${top}. Probabilities are per ${S.T} h mission (rates converted with P = 1 - exp(-lambda*T)); common-cause events use the alpha-factor model. Open in Fault Tree Editor.html to edit the tree. -->
 <opsa-mef>
   <define-fault-tree name="FTW">
+    <label>${x(S.topText||'Top event')}</label>
 ${gates.join('\n')}
   </define-fault-tree>
   <model-data>
-${evs.join('\n')}
+${defs.join('\n')}
   </model-data>
 </opsa-mef>
 `;
@@ -809,42 +1006,44 @@ const downloads=()=>dlP||(dlP=(window.claude&&window.claude.use?window.claude.us
 function showSheet(title,note,text){$('sheetTitle').textContent=title;$('sheetNote').textContent=note;$('sheetText').value=text;$('sheet').hidden=false;$('sheetText').focus();$('sheetText').select()}
 function blobSave(filename,data){const u=URL.createObjectURL(new Blob([data]));const a=document.createElement('a');
   a.href=u;a.download=filename;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),5000)}
-async function offer(filename,text,label,note){
+// localName: the real file name when the page is opened directly in a browser, where any extension can be saved
+async function offer(filename,data,label,note,localName){
   const d=await downloads();
-  if(d){try{await d.save({filename,data:text});status(`${label} saved as ${filename}`);return}
+  if(d){try{await d.save({filename,data});status(`${label} saved as ${filename}`);return}
     catch(e){if(e&&e.code==='declined'){status('Save cancelled');return}
       if(e&&e.code==='rate_limited'){status('A save prompt is already open',true);return}}}
-  if(typeof text!=='string'){blobSave(filename,text);status(`${label} downloaded as ${filename}`);return}
-  showSheet(label,(note?note+' ':'')+`Saving isn't available in this view, so copy the text below into a file named ${filename.replace(/\.txt$/,'')}.`,text);
+  if(typeof data!=='string'||!window.claude){const n=localName||filename;blobSave(n,data);status(`${label} downloaded as ${n}`);return}
+  showSheet(label,(note?note+' ':'')+`Saving isn't available in this view, so copy the text below into a file named ${localName||filename}.`,data);
 }
 $('sheetClose').onclick=()=>{$('sheet').hidden=true};
 $('sheet').addEventListener('click',e=>{if(e.target.id==='sheet')$('sheet').hidden=true});
-document.addEventListener('keydown',e=>{if(e.key==='Escape')$('sheet').hidden=true});
 $('sheetCopy').onclick=()=>{const t=$('sheetText');const ok=()=>{$('sheetCopy').textContent='Copied';setTimeout(()=>$('sheetCopy').textContent='Copy',1500)};
   try{navigator.clipboard.writeText(t.value).then(ok,()=>{t.focus();t.select()})}catch(e){t.focus();t.select()}};
 $('fSave').onclick=()=>offer('ft-workbench-project.json',JSON.stringify(S,null,2),'Project');
 $('fIbdSvg').onclick=()=>offer('ibd.svg',ibdSvg(),'IBD SVG');
-$('fSysml').onclick=()=>offer('ibd.sysml.txt',toSysML(),'SysML v2','Saved with a .txt ending because .sysml files cannot be saved from here; rename it to ibd.sysml.');
+$('fSysml').onclick=()=>offer('ibd.sysml.txt',toSysML(),'SysML v2','Saved with a .txt ending because .sysml files cannot be saved from here; rename it to ibd.sysml.','ibd.sysml');
 function pptxButton(id,build,filename,label,ready){$(id).onclick=async()=>{const btn=$(id),why=ready();if(why){status(why,true);return}
   btn.disabled=true;status(`Building ${label}…`);
   try{await offer(filename,await build(),label)}
   catch(e){status(e&&e.message==='load failed'?"Couldn't load the PowerPoint library. Check your internet connection.":`Couldn't build the ${label} file.`,true)}
   finally{btn.disabled=false}}}
-pptxButton('fIbdPptx',ibdPptx,'ibd.pptx','IBD PowerPoint',()=>S.blocks.length?'':'Add a block first');
-pptxButton('fFtPptx',ftPptx,'fault-tree.pptx','Fault tree PowerPoint',()=>lastTree?'':'Choose a top event first');
+pptxButton('fIbdPptx',ibdPptx,'ibd.pptx','IBD PowerPoint',()=>S.blocks.length>1?'':'Add a block first');
+pptxButton('fFtPptx',ftPptx,'fault-tree.pptx','Fault tree PowerPoint',()=>lastTree?'':'Connect blocks to the top event first');
 $('fFtSvg').onclick=()=>offer('fault-tree.svg',ftSvg(),'Fault tree SVG');
-$('fOpsa').onclick=()=>offer('fault-tree.opsa.xml.txt',toOpenPSA(),'Open-PSA XML','Saved with a .txt ending because .xml files cannot be saved from here; rename it to fault-tree.xml.');
+$('fOpsa').onclick=()=>offer('fault-tree.opsa.xml.txt',toOpenPSA(),'Open-PSA XML','Saved with a .txt ending because .xml files cannot be saved from here; rename it to fault-tree.xml.','fault-tree.xml');
 $('fLoad').onclick=()=>$('fileIn').click();
 $('fileIn').onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();
   r.onload=()=>{const t=String(r.result);let s=null;
     try{s=JSON.parse(t)}catch(_){const mm=t.match(/ft-layout:([A-Za-z0-9+/=]+)/);if(mm){try{s=JSON.parse(b64d(mm[1]))}catch(_){}}}
-    try{if(!s)throw new Error('no layout');S=normalize(s);sel=null;connect=false;pending=null;refresh(true);status(`Loaded ${f.name}: ${S.blocks.length} blocks, ${S.links.length} connections`)}
+    if(!s&&/<opsa-mef/.test(t)){status(`${f.name} is an Open-PSA fault tree. Open it in Fault Tree Editor.html; the workbench loads project .json and SysML files.`,true);e.target.value='';return}
+    try{if(!s)throw new Error('no layout');S=normalize(s);sel=null;connect=false;pending=null;refresh(true);status(`Loaded ${f.name}: ${S.blocks.length-1} blocks, ${S.links.length} connections`)}
     catch(err){status(`Couldn't load ${f.name}. Use a project .json or a SysML file exported from this workbench.`,true)}
     e.target.value=''};
   r.onerror=()=>status(`Couldn't read ${f.name}.`,true);r.readAsText(f)};
 
 function refresh(full){renderIBD();if(full){renderInsp();renderTop();renderCCF()}renderResults();save()}
-renderTop();renderInsp();renderCCF();refresh(false);
+$('fUndo').onclick=()=>step(true);$('fRedo').onclick=()=>step(false);
+renderTop();renderInsp();renderCCF();refresh(false);commit();
 if(oldSave)status('Click Reset example to load the hexacopter example with 2-of-6 rotor logic.');
 </script>
 

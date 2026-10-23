@@ -1,6 +1,9 @@
 # Fault Tree Workbench
 
-A single-page tool that turns an Internal Block Diagram (IBD) into a fault tree. You draw the architecture as blocks and one-way connections, give each block failure data, mark redundancy and common-cause groups, and pick a top event. The page then generates the fault tree, the minimal cut sets, the top-event probability and component importance, and updates them all as you edit.
+Two single-page tools for fault tree analysis:
+
+- **Fault Tree Workbench** (`Fault Tree Workbench.html`) turns an Internal Block Diagram (IBD) into a fault tree. You draw the architecture as blocks and one-way connections, give each block failure data, mark redundancy and common-cause groups, group blocks in labelled frames, and connect the blocks whose loss causes the top event. The page then generates the fault tree, the minimal cut sets, the top-event probability and component importance, and updates them all as you edit.
+- **Fault Tree Editor** (`Fault Tree Editor.html`) opens a fault tree saved as Open-PSA XML, from the workbench or another tool, and lets you edit the tree itself: probabilities, events, gates and grouping. See [Fault Tree Editor](#fault-tree-editor).
 
 It's meant for early design trade studies and for teaching model-based safety analysis. It is **not** a certified safety tool (see [Limitations](#limitations)).
 
@@ -15,19 +18,22 @@ It's meant for early design trade studies and for teaching model-based safety an
 5. [Import and export](#import-and-export)
 6. [Project file format](#project-file-format)
 7. [Getting failure data](#getting-failure-data)
-8. [Limitations](#limitations)
-9. [References](#references)
+8. [Fault Tree Editor](#fault-tree-editor)
+9. [Limitations](#limitations)
+10. [References](#references)
 
 ---
 
 ## Quick start
 
-1. Open the workbench. It loads an example hexacopter (battery → PDB → dual IMU, dual GNSS → flight controller → 6-in-1 ESC → six motors → thrust, which is lost when 2 of the 6 motors are lost) with **fake** failure rates.
+1. Open the workbench. It loads an example hexacopter (battery → PDB → dual IMU, dual GNSS → flight controller → 6-in-1 ESC → six motors → the top event *Loss of thrust*, which occurs when 2 of the 6 motors are lost) with **fake** failure rates. The IMUs and the GNSS receivers sit in labelled frames.
 2. Click a block to edit its name, failure model and value in the right-hand panel.
-3. Click **Connect**, tap a source block, then tap the block that receives the flow.
+3. Click **Connect**, tap a source block, then tap the block that receives the flow. Connections can run in any direction.
 4. Click a connection to set its flow label and, for backup inputs, a **redundancy group**.
-5. Choose the **top event** block and set the **mission time**.
+5. Connect the blocks whose loss causes the top event to the **TOP EVENT** node, name the undesired event and set the **mission time**.
 6. Read the results below the diagram: top-event probability, single-point failures, the fault tree, minimal cut sets and importance ranking.
+
+To start from scratch, click **Clear**, then **Confirm clear**.
 
 Your work is saved automatically in your browser. Use **Save .json** to keep a copy you can move between machines or share.
 
@@ -39,10 +45,12 @@ The workbench needs four inputs to produce a fault tree. An IBD alone isn't enou
 
 | Input | Where you set it | What it means |
 |---|---|---|
-| **Architecture** | IBD canvas | Blocks and the one-way flows between them. An arrow from A to B means B needs A's output. |
+| **Architecture** | IBD canvas | Blocks and the one-way flows between them. An arrow from A to B means B needs A's output, whichever way it points on the canvas. |
 | **Failure data** | Block inspector | Each block's chance of failing on its own, as a constant rate λ or a fixed probability. |
 | **Failure logic** | Connection inspector | Inputs are *required* by default. Inputs into the same block that share a redundancy group back each other up, and the group is lost when at least k of its n inputs are lost (k-of-n). |
-| **Top event** | Top event panel | The system-level failure the tree is built for, defined as the loss of one block's output. |
+| **Top event** | TOP EVENT node | The system-level failure the tree is built for. It's a node of its own, not a component: the blocks connected to it define when it occurs. |
+
+**Frames** add context: a labelled frame around blocks becomes an intermediate event in the tree, such as *Failure of primary GNSS*, without changing any probability.
 
 **Common-cause failures (CCF)** are added on top: blocks that share a common-cause group (e.g. two identical IMUs) can fail together from a shared cause, using the alpha-factor model.
 
@@ -56,23 +64,31 @@ The workbench needs four inputs to produce a fault tree. An IBD alone isn't enou
 |---|---|
 | **Load file…** | Open a project `.json`, or a SysML file previously exported from this workbench. |
 | **Save .json** | Save the whole project (layout, data, groups, top event). |
-| **IBD → PowerPoint** | Export the diagram as a widescreen `.pptx` slide built from native, editable shapes: blocks (stereotype, name and failure data), curved connections with arrowheads, ports, flow labels, and the TOP, CCF and shared-event (`≡ TAG`) tags. Redundant connections are dashed. |
+| **Undo** / **Redo** | Step back or forward through your changes: blocks, connections, frames, settings, Clear and Reset example included. **Ctrl+Z** undoes; **Ctrl+Shift+Z** or **Ctrl+Y** redoes (**⌘** on a Mac). A burst of typing in one field, or one drag, is a single step. The last 100 steps are kept until you reload the page. While you're typing in a field, the shortcuts undo text in that field instead. |
+| **IBD → PowerPoint** | Export the diagram as a widescreen `.pptx` slide built from native, editable shapes: blocks (stereotype, name and failure data), the top-event node, frames, curved connections with arrowheads, ports, flow labels, and the CCF and shared-event (`≡ TAG`) tags. Redundant connections and frames are dashed. |
 | **IBD → SVG** | Export the diagram as a vector image. |
 | **IBD → SysML v2** | Export the diagram as SysML v2 textual notation. |
 | **Fault tree → PowerPoint** | Export the generated tree as a `.pptx` slide built from native, editable shapes (boxes, gates, events, wires and labels), with the top-event probability in the title. |
 | **Fault tree → SVG** | Export the generated tree as a vector image. |
-| **Fault tree → Open-PSA XML** | Export the tree in the Open-PSA Model Exchange Format for other FTA tools. |
+| **Fault tree → Open-PSA XML** | Export the tree in the Open-PSA Model Exchange Format, for the [Fault Tree Editor](#fault-tree-editor) and other FTA tools. |
 
 ### Diagram toolbar
 
 | Button | Action |
 |---|---|
 | **+ Block** | Add a block. |
-| **Connect** | Draw a connection: tap the source, then the target. |
-| **Delete** | Delete the selected block (and its connections) or the selected connection. |
+| **+ Frame** | Add a labelled frame. With a block selected, the frame wraps that block; otherwise it appears in the top-left corner. See [Frames](#frames). |
+| **Connect** | Draw a connection: tap the source, then the target. The top-event node can only be a target. |
+| **Copy** / **Paste** | Copy the selected block, or a selected frame together with the blocks inside it and the connections between them, then paste a copy offset from the original. **Ctrl+C** / **Ctrl+V** (**⌘C** / **⌘V** on a Mac) work too. Pasting again places further copies. |
+| **Delete** | Delete the selected block (and its connections), connection or frame. Deleting a frame keeps its blocks. The top-event node can't be deleted. The **Delete** or **Backspace** key does the same. **Ctrl+X** (**⌘X** on a Mac) cuts instead: it copies the selection, then deletes it, and the next **Ctrl+V** puts it back in place. Cutting a frame removes its blocks too. |
+| **Clear** | Remove every block, connection and frame, leaving only the top-event node, for a blank slate. Click **Confirm clear** within 4 seconds to go ahead. Save first if you want to keep your work. |
 | **Reset example** | Replace the current project with the example. Save first if you want to keep your work. |
 
-Drag blocks to move them. Click empty canvas to clear the selection.
+Drag blocks or frames to move them; moving a frame moves the blocks inside it. Drag a frame's bottom-right corner to resize it. Click empty canvas to clear the selection.
+
+**Copies are new, independent components.** A pasted block keeps the original's name and failure data, so rename it. The exception is a block with a shared failure event tag: its copy keeps the tag, so it's the same failure drawn again. That's a quick way to draw a shared component in a second place.
+
+**Connections run in any direction.** Each connection leaves from the side of the source block that faces the target and enters the target on the side facing the source: left or right when the blocks are side by side, top or bottom when one is stacked above the other. Several connections on one side are spread out so they don't overlap. The arrowhead shows the direction of flow.
 
 ### Block settings
 
@@ -84,7 +100,6 @@ Drag blocks to move them. Click empty canvas to clear the selection.
 | **Value** | λ ≥ 0, or a probability from 0 to 1. The line below shows the resulting mission probability. |
 | **Common-cause group** | Blocks with the same name form a CCF group. Leave empty for none. |
 | **Shared failure event** | Blocks with the same tag are **one physical failure** drawn in several places. They share a single basic event that is counted once. Setting a tag that's already in use copies that block's failure data, and later edits stay in sync. The tag is shown as `≡ TAG` above the block. Leave empty for a block that is its own component. See [Modelling shared components](#modelling-shared-components). |
-| **Set as top event** | Makes this block's output loss the top event. |
 | **Never fails (P = 0)** | Sets a fixed probability of 0. The block stays in the diagram and tree (dimmed) but never causes a failure itself. |
 
 ### Connection settings
@@ -94,16 +109,36 @@ Drag blocks to move them. Click empty canvas to clear the selection.
 | **Flow** | What passes through, e.g. `28V`, `attitude`. Documentation only; it doesn't change the calculation. |
 | **Redundancy group** | Empty = required input. Connections into the **same target** with the **same group name** form a redundancy group. Redundant connections are drawn dashed. |
 | **Group loss threshold (k)** | Appears when the group has 2 or more inputs. The group is lost when **at least k** of its n inputs are lost. k = n (default) is AND, k = 1 is OR, anything between is a voting gate. The diagram label shows `k/n` when k < n. The setting is shared by every connection in the group. |
+| **Reverse direction** | Swaps source and target. Connections into the top event can't be reversed. |
 
-**Example: 2 of 6 rotors.** Add a block such as `Thrust` (a fixed probability of 0 works well, since it's a function rather than hardware). Connect all six motors to it, give each connection the redundancy group `Rotors`, then select any one of those connections and set the threshold to 2.
+**Example: 2 of 6 rotors.** Connect all six motors to the top-event node, give each connection the redundancy group `Rotors`, then select any one of those connections and set the threshold to 2.
 
-### Top event panel
+### Top event
+
+The top event is the rounded **TOP EVENT** node on the diagram. It isn't a component and has no failure data, so it never appears as a basic event; it's only the box at the top of the tree.
+
+- **Connect the blocks whose loss causes it.** Required connections mean any one of those losses causes the top event (OR). A redundancy group with threshold k means k of them must be lost.
+- **Rename it** in the Top event panel, or select the node.
+- **One cause, no extra gate.** If the top event has a single cause, the tree puts the top box directly above that cause's gate, without an extra one-input gate.
 
 | Field | Notes |
 |---|---|
-| **Undesired event** | The label at the top of the fault tree. |
-| **Block** | Whose output loss defines the top event. |
+| **Undesired event** | The label at the top of the fault tree and on the node. |
 | **Mission time (hours)** | Used to convert failure rates to probabilities. |
+
+Projects saved before the top-event node existed picked a block as the top event. When you load one, a top-event node is added next to that block and connected to it, so the results are unchanged. The block's own failure stays in the tree as a basic event.
+
+### Frames
+
+A frame is a labelled box drawn around blocks, such as a subsystem or a redundant channel. Its label becomes an intermediate event in the fault tree, so the tree reads *Failure of primary GNSS* instead of collecting every low-level failure under one OR gate.
+
+- **Membership:** a block is inside a frame when its centre is.
+- **Effect on the tree:** where a block outside the frame depends on blocks inside it, the failures coming out of the frame are gathered under a gate labelled with the frame's text, drawn as a blue box.
+- **Gate type:** inside a required input or an AND group, the frame gate has the same type as the gate it sits in, so the logic is unchanged. Inside a k-of-n group, each input from the frame is labelled separately, because a vote can't be split.
+- **Nesting:** frames can be nested; the outer frame is applied first, then the inner one.
+- **Probability:** frames only regroup the tree. The top-event probability and cut sets are the same with or without them.
+
+Select a frame to edit its label. The inspector lists the blocks inside it.
 
 ### Common-cause groups panel
 
@@ -118,7 +153,7 @@ Lists each CCF group with editable **α₁ … αₘ** values (m = number of mem
 | **Occurs about once in** | 1 / P missions. |
 | **Minimal cut sets** | Count of the smallest event combinations that cause the top event. |
 | **Single-point failures** | Events that cause the top event on their own. |
-| **Generated fault tree** | OR/AND gates, voting gates (OR shape marked `k/n`), basic events (circles) and transfer symbols (△) where a subtree is reused. Every gate shows its exact probability. Repeated basic events are drawn with a heavier circle and an `R×n` tag. Red = single-point failure; dashed circle = common-cause event; dimmed = probability 0. |
+| **Generated fault tree** | The top event at the top, then OR/AND gates, voting gates (OR shape marked `k/n`), basic events (circles) and transfer symbols (△) where a subtree is reused. A branch that's needed in several places is drawn in full once and tagged **T1**, **T2**…; every other place shows a △ with the same label instead of repeating it. It's one event, counted once. Every gate shows its exact probability. Blue boxes are frame labels. Repeated basic events are drawn with a heavier circle and an `R×n` tag. Red = single-point failure; dashed circle = common-cause event; dimmed = probability 0. |
 | **Minimal cut sets table** | Each set with its order (SPF, CCF, ×2, ×3…), probability and share of the total. |
 | **Component importance** | Fussell–Vesely: the share of P(top) that disappears if the event can't occur. |
 
@@ -136,7 +171,9 @@ For every block, its output is lost if **any** of these happen (OR):
 - any **required** input is lost;
 - **at least k of the n** inputs in a redundancy group are lost (k = n by default, which is AND within the group).
 
-The fault tree is built by walking backwards from the top-event block through its inputs. A block reached a second time is drawn as a transfer (△) rather than repeated. Blocks with no inputs become basic events.
+The top event occurs when its inputs are lost, by the same rules, but it has no internal failure of its own.
+
+The fault tree is built by walking backwards from the top-event node through its inputs. A block reached a second time is drawn as a transfer (△) rather than repeated; the full branch and its transfers share a label such as T1. Blocks with no inputs become basic events. Frames then regroup branches under their labels, as described in [Frames](#frames).
 
 ### Probabilities
 
@@ -238,7 +275,7 @@ Either way, the fault tree shows the component under every branch it affects, ma
 
 Keep these cases apart:
 
-- **Untagged blocks are always separate components,** even if they have the same name, such as two identical antennas. Their failures are combined as independent events. Copying a block without tagging it therefore models a second, independent part and double counts a component that is really shared.
+- **Untagged blocks are always separate components,** even if they have the same name, such as two identical antennas. Their failures are combined as independent events. Copying and pasting an untagged block therefore models a second, independent part and double counts a component that is really shared.
 - **Identical parts that can fail together** from a shared cause, such as the same batch, environment or software, are separate blocks in a common-cause group (see [Common-cause failures](#common-cause-failures-alpha-factor-model)), not a shared failure event.
 
 ### Loops
@@ -251,9 +288,9 @@ Static fault trees can't represent circular dependencies. If the connections for
 
 ### Saving files
 
-Each export asks you to confirm the save. If saving isn't available in your view, the content opens in a panel with a **Copy** button so you can paste it into a file yourself.
+When the page is opened directly in a browser, exports download straight away with their normal names (`ibd.sysml`, `fault-tree.xml`).
 
-Two formats are saved with an extra `.txt` ending, because only certain file types can be saved from the page. Rename them after saving:
+When the page runs inside Claude, each export asks you to confirm the save. If saving isn't available in that view, the content opens in a panel with a **Copy** button so you can paste it into a file yourself. Two formats are saved there with an extra `.txt` ending, because only certain file types can be saved; rename them after saving:
 
 | Saved as | Rename to |
 |---|---|
@@ -277,7 +314,15 @@ The file also carries the full project in a comment (`ft-layout:…`), which is 
 
 ### Open-PSA XML
 
-The Open-PSA Model Exchange Format, accepted by SCRAM and other Open-PSA-compatible tools. It contains one gate per block (`G_<block>_lost`) and one basic event per failure event, including CCF events. k-of-n groups are written as `<atleast min="k">`. Probabilities are written as **per-mission values**, already converted from rates and already split by the alpha-factor model. Use it to check the results with an independent solver.
+The Open-PSA Model Exchange Format, accepted by SCRAM and other Open-PSA-compatible tools, and by the [Fault Tree Editor](#fault-tree-editor).
+
+- **Same tree as on screen.** The file contains the generated tree: one gate for each gate on the page, including the top event, block gates (`G_<block>_output_lost`), redundancy-group gates and frame gates, each with its label.
+- **Basic events:** one per failure event, including CCF events.
+- **k-of-n groups** are written as `<atleast min="k">`.
+- **Workbench-only details** go in `<attributes>`: `ftw-kind` (top, block, group or frame) on gates, and `ftw-ccf` on common-cause events. Other tools ignore them.
+- **Probabilities** are written as **per-mission values**, already converted from rates and already split by the alpha-factor model.
+
+The file names the top gate in a comment at the start. Use the file to edit the tree in the editor, or to check the results with an independent solver.
 
 ### Browser storage
 
@@ -289,29 +334,34 @@ The current project is kept in your browser automatically (key `ft-workbench-v2`
 
 ```json
 {
-  "top": "mot",
-  "topText": "Loss of thrust control",
+  "top": "thrust",
+  "topText": "Loss of thrust",
   "T": 1,
   "ccf": { "IMU": [0.95, 0.05] },
   "vote": { "thrust|Rotors": 2 },
   "blocks": [
     { "id": "imua", "name": "IMU A", "st": "sensor",
-      "mode": "rate", "v": 5e-5, "ccf": "IMU", "x": 350, "y": 40 }
+      "mode": "rate", "v": 5e-5, "ccf": "IMU", "x": 360, "y": 40 },
+    { "id": "thrust", "kind": "top", "name": "Loss of thrust", "x": 1150, "y": 220 }
   ],
   "links": [
     { "id": "l5", "from": "imua", "to": "fc", "flow": "attitude", "group": "IMU" }
+  ],
+  "frames": [
+    { "id": "fimu", "label": "Loss of attitude data", "x": 344, "y": 16, "w": 160, "h": 184 }
   ]
 }
 ```
 
 | Field | Type | Meaning |
 |---|---|---|
-| `top` | string | Block id of the top event. |
-| `topText` | string | Top event label. |
+| `top` | string | Id of the top-event node. |
+| `topText` | string | Top event label (the same as the top-event node's name). |
 | `T` | number > 0 | Mission time in hours. |
 | `ccf` | object | CCF group name → array of alpha values α₁ … αₘ. |
 | `vote` | object | `"<target block id>|<redundancy group>"` → k, the number of lost inputs that loses the group. Missing = all (n). |
 | `blocks[].id` | string | Unique id. |
+| `blocks[].kind` | `"top"` or empty | `"top"` marks the top-event node. Exactly one block has it; its failure fields are ignored. |
 | `blocks[].name` / `st` | string | Name and stereotype. |
 | `blocks[].mode` | `"rate"` or `"prob"` | Failure model. |
 | `blocks[].v` | number | λ per hour (`rate`) or probability 0–1 (`prob`). |
@@ -321,8 +371,10 @@ The current project is kept in your browser automatically (key `ft-workbench-v2`
 | `links[].from` / `to` | string | Source and target block ids. |
 | `links[].flow` | string | Flow label. |
 | `links[].group` | string | Redundancy group name, or empty for a required input. |
+| `frames[].label` | string | Text of the frame, used as the intermediate event in the tree. |
+| `frames[].x`, `y`, `w`, `h` | number | Position and size of the frame on the canvas. |
 
-Files from the first version (with `p` instead of `mode`/`v`) load as constant rates.
+Files from the first version (with `p` instead of `mode`/`v`) load as constant rates. Files without a top-event node get one, connected to their old top block.
 
 ---
 
@@ -342,6 +394,46 @@ Files from the first version (with `p` instead of `mode`/`v`) load as constant r
 
 ---
 
+## Fault Tree Editor
+
+`Fault Tree Editor.html` edits a fault tree directly, without the block diagram behind it. Use it to adjust a generated tree for a report, try what-if probabilities, or rework a tree from another Open-PSA tool. It recalculates as you edit, using the same exact BDD method as the workbench.
+
+### Opening a tree
+
+1. In the workbench, click **Fault tree → Open-PSA XML**.
+2. In the editor, click **Open XML…** and choose the file, or drop it onto the page.
+
+The editor opens the top gate named in the workbench's comment, or else the gate that no other gate uses. It also reads files from other Open-PSA tools if they use OR, AND and at-least gates (nested formulas included), and basic events given as a `float`, a `parameter` or an `exponential` of two floats. Anything else is reported when the file opens. **New tree** starts a tree with one gate and one basic event.
+
+The tree is kept in your browser automatically (key `ft-editor-v1`). Changes don't flow back to the workbench project: the editor works on the tree, not the IBD.
+
+### Editing
+
+Tap any box in the tree to select it. The panel on the right shows what you can change.
+
+| Selected | What you can do |
+|---|---|
+| **Top event or gate** | Edit the description. Change the type: OR, AND, or at least k of the inputs. Reorder (↑ ↓) or remove (✕) inputs. Add a new basic event or gate, or an existing one. Tick several inputs and click **Group checked under new gate** to put them under a new labelled intermediate event. |
+| **Basic event** | Edit the description and the probability per mission. |
+| **Anything but the top event** | **Insert gate above** wraps it in a new gate. **Remove from parent** takes it out of the gate it was selected under. |
+
+The **Basic events** table lists every event with editable description and probability fields, sorted by importance, so you can change several probabilities quickly.
+
+- **Undo and Redo** (**Ctrl+Z**, **Ctrl+Shift+Z** or **Ctrl+Y**) cover every change.
+- **Unused items are removed.** An event or gate that's no longer used anywhere is deleted automatically.
+- **Loops are blocked.** The "add existing" list never offers a gate that would create a loop.
+
+**Adding labels without changing the result.** Grouping inputs of an OR gate under a new OR gate, or inputs of an AND gate under a new AND gate, adds an intermediate event but leaves every probability unchanged. Grouping is not offered for several inputs of an at-least gate, because that would change the vote. Changing a gate's type, or adding and removing inputs, does change the logic.
+
+**Repeated events.** Adding an existing event under a second gate makes it a repeated event: it's drawn in both places, marked `R×n`, and counted once. A gate used in more than one place is drawn in full once, tagged **T1**, **T2**…, and shown elsewhere as a transfer (△) with the same label.
+
+### Results and export
+
+- **Results:** the top-event probability, single-point failures, repeated events and minimal cut sets, as in the workbench. Every gate shows its exact probability. An empty gate is outlined in red and never occurs until it has inputs.
+- **Exports:** Open-PSA XML (which the editor and the workbench's other tools can read), PowerPoint (editable shapes, as in the workbench) and SVG.
+
+---
+
 ## Limitations
 
 - **Not a certified tool.** Use it for early design and trade studies; verify safety-case numbers with a qualified tool and process (e.g. ARP4761, ISO 26262, IEC 61508).
@@ -357,6 +449,8 @@ Files from the first version (with `p` instead of `mode`/`v`) load as constant r
 - **Shared failure events** use the first tagged block's common-cause group; groups set on the other tagged blocks are ignored.
 - **PowerPoint export** loads the PptxGenJS library from cdn.jsdelivr.net the first time it's used, so it needs an internet connection. The IBD is scaled to fit one widescreen slide. Very large fault trees are scaled down to PowerPoint's 56-inch slide limit.
 - **SysML import** only reads files exported by this workbench.
+- **Frames use block centres**, so a block only half inside a frame may or may not belong to it. Frames don't regroup the inputs of a k-of-n group into one sub-gate.
+- **The editor and the workbench are separate.** Edits made in the Fault Tree Editor don't update the workbench project, and the editor supports OR, AND and at-least gates only (no NOT, XOR or house events).
 
 ---
 
