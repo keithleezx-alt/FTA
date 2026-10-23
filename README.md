@@ -56,7 +56,7 @@ The workbench needs four inputs to produce a fault tree. An IBD alone isn't enou
 |---|---|
 | **Load file…** | Open a project `.json`, or a SysML file previously exported from this workbench. |
 | **Save .json** | Save the whole project (layout, data, groups, top event). |
-| **IBD → PowerPoint** | Export the diagram as a widescreen `.pptx` slide built from native, editable shapes: blocks (stereotype, name and failure data), curved connections with arrowheads, ports, flow labels, and the TOP and CCF tags. Redundant connections are dashed. |
+| **IBD → PowerPoint** | Export the diagram as a widescreen `.pptx` slide built from native, editable shapes: blocks (stereotype, name and failure data), curved connections with arrowheads, ports, flow labels, and the TOP, CCF and shared-event (`≡ TAG`) tags. Redundant connections are dashed. |
 | **IBD → SVG** | Export the diagram as a vector image. |
 | **IBD → SysML v2** | Export the diagram as SysML v2 textual notation. |
 | **Fault tree → PowerPoint** | Export the generated tree as a `.pptx` slide built from native, editable shapes (boxes, gates, events, wires and labels), with the top-event probability in the title. |
@@ -83,6 +83,7 @@ Drag blocks to move them. Click empty canvas to clear the selection.
 | **Failure model** | *Constant failure rate λ* (per hour) or *Fixed probability* (per mission). Switching converts the value so the probability stays the same. |
 | **Value** | λ ≥ 0, or a probability from 0 to 1. The line below shows the resulting mission probability. |
 | **Common-cause group** | Blocks with the same name form a CCF group. Leave empty for none. |
+| **Shared failure event** | Blocks with the same tag are **one physical failure** drawn in several places. They share a single basic event that is counted once. Setting a tag that's already in use copies that block's failure data, and later edits stay in sync. The tag is shown as `≡ TAG` above the block. Leave empty for a block that is its own component. See [Modelling shared components](#modelling-shared-components). |
 | **Set as top event** | Makes this block's output loss the top event. |
 | **Never fails (P = 0)** | Sets a fixed probability of 0. The block stays in the diagram and tree (dimmed) but never causes a failure itself. |
 
@@ -163,7 +164,7 @@ In the example, the 15 motor-pair cut sets sum to 6.0 × 10⁻⁹ per hour, whic
 
 ### Repeated events and top-event probability
 
-A basic event is *repeated* when it reaches the top event through more than one path, for example a block that feeds several others, or a CCF event shared by several members. Multiplying and adding gate probabilities naively would count such an event more than once.
+A basic event is *repeated* when it reaches the top event through more than one path, for example a block that feeds several others, a CCF event shared by several members, or blocks tagged with the same **shared failure event**. Multiplying and adding gate probabilities naively would count such an event more than once.
 
 The workbench avoids this by building a **binary decision diagram (BDD)** of the whole logic, where every basic event is one variable. The top-event probability, every gate probability in the tree and the Fussell–Vesely importance are computed exactly from the BDD, so each event is counted once, however many branches it appears in. There is no limit on the number of events.
 
@@ -224,16 +225,21 @@ What the comparison shows:
 - **The hand result is right to 3 significant figures** (8.77 × 10⁻⁷). Treating + as addition is the rare-event approximation: it ignores the small chance that two cut sets occur together, so it always overestimates slightly. The workbench uses the exact rule P(X or Y) = P(X) + P(Y) − P(X)·P(Y). The difference is negligible here but grows for probabilities around 10⁻² and above.
 - **Simplifying first is essential by hand.** Putting numbers into the unsimplified equation multiplies the two B terms as if they were independent failures, which gives a result about 13 times too low. The workbench avoids this automatically because each event is a single variable, however many branches it appears in, so no hand simplification is needed.
 
-**Modelling this in the workbench.** Draw each component as one block. If a component feeds several branches, such as B and G here, connect that single block to every place that needs it. See [Modelling shared components](#modelling-shared-components).
+**Modelling this in the workbench.** Draw each component as one block. If a component feeds several branches, such as B and G here, connect that single block to every place that needs it, or draw it more than once and give every copy the same shared failure event tag. See [Modelling shared components](#modelling-shared-components).
 
 ### Modelling shared components
 
-Shared failures come straight from the architecture. Each block is one basic event, so a component that several others depend on is counted once automatically:
+Each block is one basic event, so a component that several others depend on is counted once. There are two ways to draw such a component:
 
-- **Shared component: draw it once.** If a single power supply, antenna or bus feeds B and C, draw one block and connect it to both. The tree then shows the component under each branch it affects (marked `R×n`), and every probability counts it once.
-- **Separate components: draw them separately.** Two blocks are always two independent components, even if they have the same name, such as two identical antennas. Their failures are combined as independent events.
-- **Don't duplicate a block to tidy the diagram.** Drawing the same physical part twice makes it two independent failures, which double counts it. Connect the one block to every place that needs it instead, even if the lines cross.
-- **Identical parts that can fail together** from a shared cause, such as the same batch, environment or software, are a different case. Model them as separate blocks in a common-cause group (see [Common-cause failures](#common-cause-failures-alpha-factor-model)).
+- **Draw it once and connect it everywhere it's needed.** If a single power supply, antenna or bus feeds B and C, draw one block and connect it to both. No other setting is needed.
+- **Draw it in several places and tag the copies.** Sometimes one block can't reasonably connect to everything, for example a component used by distant parts of the diagram, or one that would make the diagram unreadable. Draw a block in each place and give every copy the same **shared failure event** tag, such as `ANT-1`. The copies become one basic event, their failure data stays in sync, and each shows `≡ ANT-1` above it.
+
+Either way, the fault tree shows the component under every branch it affects, marked `R×n`, and every probability counts it once.
+
+Keep these cases apart:
+
+- **Untagged blocks are always separate components,** even if they have the same name, such as two identical antennas. Their failures are combined as independent events. Copying a block without tagging it therefore models a second, independent part and double counts a component that is really shared.
+- **Identical parts that can fail together** from a shared cause, such as the same batch, environment or software, are separate blocks in a common-cause group (see [Common-cause failures](#common-cause-failures-alpha-factor-model)), not a shared failure event.
 
 ### Loops
 
@@ -310,6 +316,7 @@ The current project is kept in your browser automatically (key `ft-workbench-v2`
 | `blocks[].mode` | `"rate"` or `"prob"` | Failure model. |
 | `blocks[].v` | number | λ per hour (`rate`) or probability 0–1 (`prob`). |
 | `blocks[].ccf` | string | Common-cause group name, or empty. |
+| `blocks[].rep` | string | Shared failure event tag, or empty. Blocks with the same tag share one basic event. |
 | `blocks[].x`, `y` | number | Position on the 1300 × 520 canvas. |
 | `links[].from` / `to` | string | Source and target block ids. |
 | `links[].flow` | string | Flow label. |
@@ -347,6 +354,7 @@ Files from the first version (with `p` instead of `mode`/`v`) load as constant r
 - **k-of-n is count-based.** It treats all inputs in the group as equal. Losing two *adjacent* rotors on a hexacopter is often worse than losing two opposite ones; to capture that, model the specific bad pairs explicitly instead.
 - **Renaming a redundancy group** resets its threshold to k = n.
 - **Performance**: large or highly redundant models may hit the 6,000-combination cap in the cut-set table, or fall back to the rare-event approximation. The exact probability doesn't depend on the cut-set cap.
+- **Shared failure events** use the first tagged block's common-cause group; groups set on the other tagged blocks are ignored.
 - **PowerPoint export** loads the PptxGenJS library from cdn.jsdelivr.net the first time it's used, so it needs an internet connection. The IBD is scaled to fit one widescreen slide. Very large fault trees are scaled down to PowerPoint's 56-inch slide limit.
 - **SysML import** only reads files exported by this workbench.
 
