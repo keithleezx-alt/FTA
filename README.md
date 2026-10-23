@@ -56,8 +56,10 @@ The workbench needs four inputs to produce a fault tree. An IBD alone isn't enou
 |---|---|
 | **Load file…** | Open a project `.json`, or a SysML file previously exported from this workbench. |
 | **Save .json** | Save the whole project (layout, data, groups, top event). |
+| **IBD → PowerPoint** | Export the diagram as a widescreen `.pptx` slide built from native, editable shapes: blocks (stereotype, name and failure data), curved connections with arrowheads, ports, flow labels, and the TOP, CCF and shared-event (`≡ TAG`) tags. Redundant connections are dashed. |
 | **IBD → SVG** | Export the diagram as a vector image. |
 | **IBD → SysML v2** | Export the diagram as SysML v2 textual notation. |
+| **Fault tree → PowerPoint** | Export the generated tree as a `.pptx` slide built from native, editable shapes (boxes, gates, events, wires and labels), with the top-event probability in the title. |
 | **Fault tree → SVG** | Export the generated tree as a vector image. |
 | **Fault tree → Open-PSA XML** | Export the tree in the Open-PSA Model Exchange Format for other FTA tools. |
 
@@ -81,6 +83,7 @@ Drag blocks to move them. Click empty canvas to clear the selection.
 | **Failure model** | *Constant failure rate λ* (per hour) or *Fixed probability* (per mission). Switching converts the value so the probability stays the same. |
 | **Value** | λ ≥ 0, or a probability from 0 to 1. The line below shows the resulting mission probability. |
 | **Common-cause group** | Blocks with the same name form a CCF group. Leave empty for none. |
+| **Shared failure event** | Blocks with the same tag are **one physical failure** drawn in several places. They share a single basic event that is counted once. Setting a tag that's already in use copies that block's failure data, and later edits stay in sync. The tag is shown as `≡ TAG` above the block. Leave empty for a block that is its own component. See [Modelling shared components](#modelling-shared-components). |
 | **Set as top event** | Makes this block's output loss the top event. |
 | **Never fails (P = 0)** | Sets a fixed probability of 0. The block stays in the diagram and tree (dimmed) but never causes a failure itself. |
 
@@ -111,12 +114,15 @@ Lists each CCF group with editable **α₁ … αₘ** values (m = number of mem
 | Section | What it shows |
 |---|---|
 | **Top-event probability** | P per mission, labelled *exact* or *rare-event approx.* |
+| **Repeated events** | Basic events that appear under more than one branch of the tree. Each is counted once. |
 | **Occurs about once in** | 1 / P missions. |
 | **Minimal cut sets** | Count of the smallest event combinations that cause the top event. |
 | **Single-point failures** | Events that cause the top event on their own. |
-| **Generated fault tree** | OR/AND gates, voting gates (OR shape marked `k/n`), basic events (circles) and transfer symbols (△) where a subtree is reused. Red = single-point failure; dashed circle = common-cause event; dimmed = probability 0. |
+| **Generated fault tree** | OR/AND gates, voting gates (OR shape marked `k/n`), basic events (circles) and transfer symbols (△) where a subtree is reused. Every gate shows its exact probability. Repeated basic events are drawn with a heavier circle and an `R×n` tag. Red = single-point failure; dashed circle = common-cause event; dimmed = probability 0. |
 | **Minimal cut sets table** | Each set with its order (SPF, CCF, ×2, ×3…), probability and share of the total. |
-| **Component importance** | Fussell–Vesely: the share of top-event risk from cut sets that contain each event. |
+| **Component importance** | Fussell–Vesely: the share of P(top) that disappears if the event can't occur. |
+
+The tree preview always scales to fit the panel width and the window height, so the whole tree is visible without scrolling. Hover over a box to read its full label and probability. Use the PowerPoint or SVG export to see a large tree at full size.
 
 ---
 
@@ -156,10 +162,84 @@ Cut sets are built bottom-up (OR = union of lists, AND = cross-product) and redu
 
 In the example, the 15 motor-pair cut sets sum to 6.0 × 10⁻⁹ per hour, which matches the binomial result P(≥2 of 6) = 1 − (1−p)⁶ − 6p(1−p)⁵ with p ≈ 2 × 10⁻⁵.
 
-### Top-event probability
+### Repeated events and top-event probability
 
-- If the cut sets involve **18 or fewer** distinct basic events, P is computed **exactly** by checking every combination of event states.
-- Otherwise it uses the **rare-event approximation** (sum of cut-set probabilities, capped at 1), which slightly overestimates P.
+A basic event is *repeated* when it reaches the top event through more than one path, for example a block that feeds several others, a CCF event shared by several members, or blocks tagged with the same **shared failure event**. Multiplying and adding gate probabilities naively would count such an event more than once.
+
+The workbench avoids this by building a **binary decision diagram (BDD)** of the whole logic, where every basic event is one variable. The top-event probability, every gate probability in the tree and the Fussell–Vesely importance are computed exactly from the BDD, so each event is counted once, however many branches it appears in. There is no limit on the number of events.
+
+Example: A feeds both B and C, and the top event needs both B and C lost. With P(A) = 0.1, P(B) = 0.2 and P(C) = 0.3, the exact result is 0.1 + 0.9 × 0.2 × 0.3 = 0.154. Treating the two branches as independent would give 0.193.
+
+If a model is too large for the BDD (more than 300,000 nodes), P falls back to the **rare-event approximation** (sum of cut-set probabilities, capped at 1), which overestimates P, and the readout says so.
+
+### Worked example: comparing with a hand calculation
+
+This example follows a typical hand calculation and shows which steps the workbench performs automatically.
+
+**The equation.** Expanding a fault tree gives this Boolean equation:
+
+```
+[(A·B) + (C + B + D + E)] · [(B + F + G) + G] · H
+```
+
+B appears in both brackets and G appears twice in the second, so both are repeated events.
+
+**Hand simplification.**
+
+1. First bracket: B + A·B = B (absorption law, X + X·Y = X), which gives B + C + D + E.
+2. Second bracket: G + G = G (idempotent law, X + X = X), which gives B + F + G.
+3. Combine: (B + C + D + E) · (B + F + G) = B + (C + D + E)·(F + G) (distributive law, (X + Y)·(X + Z) = X + Y·Z).
+
+The result is:
+
+```
+[B + (C + D + E)·(F + G)] · H
+```
+
+**What the workbench does instead.** It derives the logic from the block diagram rather than from a typed equation, and applies the same laws while building the minimal cut sets:
+
+| Hand step | Workbench equivalent |
+|---|---|
+| Idempotent law (G + G = G) | Each event appears once in a cut set, so G·G becomes G. |
+| Absorption law (B + A·B = B) | Any cut set that contains a smaller cut set is removed, so {A, B} is dropped because {B} exists. |
+| Distributive law and final form | The minimal cut sets are the simplified equation written out as a sum of products. |
+
+For this equation the cut-set table lists 7 minimal cut sets: {B, H}, {C, F, H}, {C, G, H}, {D, F, H}, {D, G, H}, {E, F, H} and {E, G, H}. Event A drops out, as it does in step 1.
+
+**Probabilities.** With these per-mission values:
+
+| Event | A | B | C | D | E | F | G | H |
+|---|---|---|---|---|---|---|---|---|
+| P | 2.56E−06 | 1.10E−03 | 1.16E−03 | 5.36E−06 | 1.20E−03 | 1.10E−03 | 1.10E−02 | 7.77E−04 |
+
+| Method | P(top) |
+|---|---|
+| Hand calculation: + as addition, · as multiplication (rare-event approximation) | 8.7694 × 10⁻⁷ |
+| Sum of the 7 minimal cut-set probabilities | 8.7694 × 10⁻⁷ |
+| **Workbench (exact, BDD)** | **8.7688 × 10⁻⁷** |
+| Brute force over all 256 event combinations of the original equation | 8.7688 × 10⁻⁷ |
+| Unsimplified equation with + and · applied directly | 6.5 × 10⁻⁸ (wrong) |
+
+What the comparison shows:
+
+- **The hand result is right to 3 significant figures** (8.77 × 10⁻⁷). Treating + as addition is the rare-event approximation: it ignores the small chance that two cut sets occur together, so it always overestimates slightly. The workbench uses the exact rule P(X or Y) = P(X) + P(Y) − P(X)·P(Y). The difference is negligible here but grows for probabilities around 10⁻² and above.
+- **Simplifying first is essential by hand.** Putting numbers into the unsimplified equation multiplies the two B terms as if they were independent failures, which gives a result about 13 times too low. The workbench avoids this automatically because each event is a single variable, however many branches it appears in, so no hand simplification is needed.
+
+**Modelling this in the workbench.** Draw each component as one block. If a component feeds several branches, such as B and G here, connect that single block to every place that needs it, or draw it more than once and give every copy the same shared failure event tag. See [Modelling shared components](#modelling-shared-components).
+
+### Modelling shared components
+
+Each block is one basic event, so a component that several others depend on is counted once. There are two ways to draw such a component:
+
+- **Draw it once and connect it everywhere it's needed.** If a single power supply, antenna or bus feeds B and C, draw one block and connect it to both. No other setting is needed.
+- **Draw it in several places and tag the copies.** Sometimes one block can't reasonably connect to everything, for example a component used by distant parts of the diagram, or one that would make the diagram unreadable. Draw a block in each place and give every copy the same **shared failure event** tag, such as `ANT-1`. The copies become one basic event, their failure data stays in sync, and each shows `≡ ANT-1` above it.
+
+Either way, the fault tree shows the component under every branch it affects, marked `R×n`, and every probability counts it once.
+
+Keep these cases apart:
+
+- **Untagged blocks are always separate components,** even if they have the same name, such as two identical antennas. Their failures are combined as independent events. Copying a block without tagging it therefore models a second, independent part and double counts a component that is really shared.
+- **Identical parts that can fail together** from a shared cause, such as the same batch, environment or software, are separate blocks in a common-cause group (see [Common-cause failures](#common-cause-failures-alpha-factor-model)), not a shared failure event.
 
 ### Loops
 
@@ -236,6 +316,7 @@ The current project is kept in your browser automatically (key `ft-workbench-v2`
 | `blocks[].mode` | `"rate"` or `"prob"` | Failure model. |
 | `blocks[].v` | number | λ per hour (`rate`) or probability 0–1 (`prob`). |
 | `blocks[].ccf` | string | Common-cause group name, or empty. |
+| `blocks[].rep` | string | Shared failure event tag, or empty. Blocks with the same tag share one basic event. |
 | `blocks[].x`, `y` | number | Position on the 1300 × 520 canvas. |
 | `links[].from` / `to` | string | Source and target block ids. |
 | `links[].flow` | string | Flow label. |
@@ -272,7 +353,9 @@ Files from the first version (with `p` instead of `mode`/`v`) load as constant r
 - **Constant failure rates**: wear-out and infant mortality aren't modelled.
 - **k-of-n is count-based.** It treats all inputs in the group as equal. Losing two *adjacent* rotors on a hexacopter is often worse than losing two opposite ones; to capture that, model the specific bad pairs explicitly instead.
 - **Renaming a redundancy group** resets its threshold to k = n.
-- **Performance**: large or highly redundant models may hit the 6,000-combination cap or fall back to the rare-event approximation.
+- **Performance**: large or highly redundant models may hit the 6,000-combination cap in the cut-set table, or fall back to the rare-event approximation. The exact probability doesn't depend on the cut-set cap.
+- **Shared failure events** use the first tagged block's common-cause group; groups set on the other tagged blocks are ignored.
+- **PowerPoint export** loads the PptxGenJS library from cdn.jsdelivr.net the first time it's used, so it needs an internet connection. The IBD is scaled to fit one widescreen slide. Very large fault trees are scaled down to PowerPoint's 56-inch slide limit.
 - **SysML import** only reads files exported by this workbench.
 
 ---

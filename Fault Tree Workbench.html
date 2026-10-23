@@ -95,7 +95,8 @@ input.bad{border-color:var(--critical)}
 .readout .v.top{color:var(--accent)}
 .readout .v.crit{color:var(--critical)}
 .readout .s{font-size:12px;color:var(--muted)}
-#ft{display:block}
+#ft{display:block;width:100%;height:auto;max-height:78vh;margin:0 auto}
+.ft-wrap{padding:8px}
 .ft-box{fill:var(--surface);stroke:var(--line-strong);stroke-width:1}
 .ft-box.top{stroke:var(--accent);stroke-width:2;fill:var(--accent-soft)}
 .ft-box.spf{stroke:var(--critical);stroke-width:1.6;fill:var(--critical-soft)}
@@ -111,6 +112,10 @@ input.bad{border-color:var(--critical)}
 .ft-wire{fill:none;stroke:var(--line-strong);stroke-width:1.1}
 .ft-xfer{fill:var(--surface);stroke:var(--flow);stroke-width:1.3}
 .ft-xtxt{font:10px var(--f-mono);fill:var(--flow)}
+.ft-gp{font:10px var(--f-mono);fill:var(--accent)}
+.ft-basic.rep{stroke-width:2.4}
+.ft-rep{font:600 9.5px var(--f-mono);fill:var(--flow)}
+.blk .reptag{font:600 9.5px var(--f-mono);fill:var(--flow)}
 .cols{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:18px;align-items:start}
 @media (max-width:880px){.cols{grid-template-columns:minmax(0,1fr)}}
 table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
@@ -150,8 +155,8 @@ tr.spf .bar>i{background:var(--critical)}
   <section class="panel">
     <div class="filebar">
       <div class="fgroup"><span class="flabel">Project</span><button id="fLoad" type="button">Load file…</button><button id="fSave" type="button">Save .json</button></div>
-      <div class="fgroup"><span class="flabel">IBD</span><button id="fIbdSvg" type="button">SVG</button><button id="fSysml" type="button">SysML v2</button></div>
-      <div class="fgroup"><span class="flabel">Fault tree</span><button id="fFtSvg" type="button">SVG</button><button id="fOpsa" type="button">Open-PSA XML</button></div>
+      <div class="fgroup"><span class="flabel">IBD</span><button id="fIbdPptx" type="button">PowerPoint</button><button id="fIbdSvg" type="button">SVG</button><button id="fSysml" type="button">SysML v2</button></div>
+      <div class="fgroup"><span class="flabel">Fault tree</span><button id="fFtPptx" type="button">PowerPoint</button><button id="fFtSvg" type="button">SVG</button><button id="fOpsa" type="button">Open-PSA XML</button></div>
       <span id="status" class="note" role="status"></span>
     </div>
     <input type="file" id="fileIn" accept=".json,.sysml,.txt,application/json,text/plain" hidden>
@@ -192,6 +197,7 @@ tr.spf .bar>i{background:var(--critical)}
       <div class="sect">
         <h2>Failure logic</h2>
         <p class="note">A block's output is lost if the block itself fails, <b>or</b> any required input is lost, <b>or</b> a redundancy group is lost. A group is lost when at least k of its n inputs are lost (k = n by default). A block with probability 0 never fails on its own.</p>
+        <p class="note">A block that feeds several others is one basic event, however many branches of the tree it appears in. Blocks given the same <b>shared failure event</b> tag are one physical failure drawn in several places, and also share one event. Each event is counted once: probabilities are computed exactly from a binary decision diagram, so a repeated event is never double counted.</p>
         <p class="note">Common-cause groups use the alpha-factor model: Q<sub>k</sub> = k / C(m−1, k−1) · α<sub>k</sub> / α<sub>t</sub> · Q<sub>t</sub>, with α<sub>t</sub> = Σ k·α<sub>k</sub>.</p>
       </div>
     </aside>
@@ -200,8 +206,8 @@ tr.spf .bar>i{background:var(--critical)}
   <section class="panel"><div class="readout" id="readout"></div></section>
 
   <section class="panel">
-    <div class="panel-h"><h2>Generated fault tree</h2><span class="note">△ = transfer to a subtree drawn elsewhere · red = single-point failure · dashed = common cause</span></div>
-    <div class="scroll"><svg id="ft"></svg></div>
+    <div class="panel-h"><h2>Generated fault tree</h2><span class="note">△ = transfer to a subtree drawn elsewhere · red = single-point failure · dashed = common cause · R×n = repeated event, counted once</span></div>
+    <div class="ft-wrap"><svg id="ft" aria-label="Generated fault tree"></svg></div>
   </section>
 
   <div class="cols">
@@ -265,7 +271,7 @@ function normalize(s){
     if(!b.id)b.id=Math.random().toString(36).slice(2,8);
     if(b.v==null){b.v=+b.p||0;b.mode='rate'}delete b.p;
     b.mode=b.mode==='prob'?'prob':'rate';b.v=Math.max(0,+b.v||0);if(b.mode==='prob')b.v=Math.min(1,b.v);
-    b.x=+b.x||0;b.y=+b.y||0;b.name=String(b.name||'Block');b.st=String(b.st||'');b.ccf=String(b.ccf||'');}
+    b.x=+b.x||0;b.y=+b.y||0;b.name=String(b.name||'Block');b.st=String(b.st||'');b.ccf=String(b.ccf||'');b.rep=String(b.rep||'').trim();}
   const ids=new Set(s.blocks.map(b=>b.id));
   s.links=s.links.filter(l=>ids.has(l.from)&&ids.has(l.to)).map(l=>({id:l.id||Math.random().toString(36).slice(2,8),from:l.from,to:l.to,flow:String(l.flow||''),group:String(l.group||'')}));
   if(!ids.has(s.top))s.top=s.blocks[0]?.id;
@@ -290,12 +296,12 @@ function bezier(a,b){
   const c1x=sx+dx,c2x=tx-dx,m=t=>{const u=1-t;return[u*u*u*sx+3*u*u*t*c1x+3*u*t*t*c2x+t*t*t*tx,u*u*u*sy+3*u*u*t*sy+3*u*t*t*ty+t*t*t*ty]};
   return{d:`M${sx},${sy} C${c1x},${sy} ${c2x},${ty} ${tx-2},${ty}`,mid:m(.5),sx,sy,tx,ty};
 }
+function linkText(l){let t=l.flow;if(l.group){const n=groupSize(l.to,l.group),k=voteK(l.to,l.group,n);t+=` ∥${l.group}`+(n>1&&k<n?` ${k}/${n}`:'')}return t}
 function rateText(b){return b.mode==='prob'?(b.v>0?`P ${fmt(b.v)} fixed`:'P 0 · never fails'):`λ ${fmt(b.v)} /h`}
 function renderIBD(){
   const m=byId();let L='';
   for(const l of S.links){const a=m[l.from],b=m[l.to];if(!a||!b)continue;
-    let txt=l.flow;if(l.group){const n=groupSize(l.to,l.group),k=voteK(l.to,l.group,n);txt+=` ∥${l.group}`+(n>1&&k<n?` ${k}/${n}`:'')}
-    const g=bezier(a,b),w=txt.length*6.4+10;
+    const txt=linkText(l),g=bezier(a,b),w=txt.length*6.4+10;
     const s=sel&&sel.t==='l'&&sel.id===l.id?' sel':'';
     L+=`<g data-link="${l.id}"><path class="link${l.group?' grp':''}${s}" d="${g.d}" marker-end="url(#arrowhead)"/><path class="linkhit" d="${g.d}"/>`+
       (txt?`<rect class="lbl-bg" x="${g.mid[0]-w/2}" y="${g.mid[1]-9}" width="${w}" height="17" rx="3"/><text class="lbl" x="${g.mid[0]}" y="${g.mid[1]+3.5}" text-anchor="middle">${esc(txt)}</text>`:'')+
@@ -306,6 +312,7 @@ function renderIBD(){
     const cls=['blk'];if(sel&&sel.t==='b'&&sel.id===b.id)cls.push('sel');if(pending===b.id)cls.push('pending');if(S.top===b.id)cls.push('top');
     B+=`<g class="${cls.join(' ')}" data-block="${b.id}" transform="translate(${b.x},${b.y})"><rect class="body" width="${W}" height="${H}" rx="4"/>`+
       `<text class="stereo" x="8" y="13">«${esc(b.st||'part')}»</text><text class="name" x="8" y="30">${esc(b.name)}</text><text class="rate" x="8" y="46">${esc(rateText(b))}</text>`+
+      (b.rep?`<text class="reptag" x="2" y="-4">≡ ${esc(b.rep)}</text>`:'')+
       (b.ccf?`<text class="ccftag" x="${W-7}" y="13" text-anchor="end">CCF·${esc(b.ccf)}</text>`:'')+
       (S.top===b.id?`<rect class="toptagbg" x="${W-34}" y="-8" width="34" height="15" rx="2"/><text class="toptag" x="${W-17}" y="3" text-anchor="middle">TOP</text>`:'')+`</g>`;}
   $('ibdBlocks').innerHTML=B;
@@ -340,6 +347,12 @@ function renderTop(){
   $('topSel').innerHTML=S.blocks.map(b=>`<option value="${b.id}"${b.id===S.top?' selected':''}>${esc(b.name)}</option>`).join('');
 }
 function derivedLine(b){return b.mode==='prob'?'Fixed per mission, independent of mission time':`P over ${mT()} h = ${fmt(pb(b))}`}
+function repNote(b){
+  if(!b.rep)return'Give blocks the same tag when they are one physical failure drawn in several places, e.g. a shared antenna. It is then counted once.';
+  const pr=repPrimary().get(b.rep),others=S.blocks.filter(o=>o!==b&&o.rep===b.rep);
+  if(!others.length)return'No other block uses this tag yet.';
+  return`Same failure as ${others.map(o=>o.name).join(', ')}: one basic event, counted once. Failure data is kept in sync.`+(pr!==b&&b.ccf?` Common-cause group comes from ${pr.name}.`:'');
+}
 function renderInsp(){
   const el=$('insp'),m=byId();
   if(sel&&sel.t==='b'&&m[sel.id]){const b=m[sel.id];
@@ -349,14 +362,19 @@ function renderInsp(){
       <label class="f">${b.mode==='prob'?'Probability of failure (0 to 1)':'Failure rate λ (per hour, 0 or more)'}<input id="iV" class="mono" type="text" inputmode="decimal" value="${b.v}"></label>
       <p class="derived" id="iDer">${esc(derivedLine(b))}</p>
       <label class="f">Common-cause group<input id="iCcf" type="text" placeholder="e.g. IMU — empty = none" value="${esc(b.ccf||'')}"></label>
+      <label class="f">Shared failure event<input id="iRep" type="text" placeholder="e.g. ANT-1 — empty = own event" value="${esc(b.rep||'')}"></label>
+      <p class="note" id="iRepN">${esc(repNote(b))}</p>
       <div class="row"><button id="iTop" type="button">Set as top event</button><button id="iZero" type="button">Never fails (P = 0)</button></div>`;
+    const sync=()=>{if(b.rep)for(const o of S.blocks)if(o!==b&&o.rep===b.rep){o.mode=b.mode;o.v=b.v}};
     $('iName').oninput=e=>{b.name=e.target.value;refresh(false);renderTop();renderCCF()};
     $('iSt').oninput=e=>{b.st=e.target.value;refresh(false)};
     $('iMode').onchange=e=>{const P=pb(b);b.mode=e.target.value;
-      b.v=b.mode==='prob'?+P.toPrecision(4):(P<1?+(-Math.log(1-P)/mT()).toPrecision(4):b.v);renderInsp();refresh(false)};
+      b.v=b.mode==='prob'?+P.toPrecision(4):(P<1?+(-Math.log(1-P)/mT()).toPrecision(4):b.v);sync();renderInsp();refresh(false)};
     $('iV').oninput=e=>{const v=parseFloat(e.target.value.replace('−','-'));const ok=v>=0&&(b.mode==='rate'||v<=1)&&isFinite(v);
-      e.target.classList.toggle('bad',!ok);if(ok){b.v=v;$('iDer').textContent=derivedLine(b);refresh(false)}};
-    $('iZero').onclick=()=>{b.mode='prob';b.v=0;renderInsp();refresh(false)};
+      e.target.classList.toggle('bad',!ok);if(ok){b.v=v;sync();$('iDer').textContent=derivedLine(b);refresh(false)}};
+    $('iZero').onclick=()=>{b.mode='prob';b.v=0;sync();renderInsp();refresh(false)};
+    $('iRep').onchange=e=>{b.rep=e.target.value.trim();const p=b.rep&&repPrimary().get(b.rep);
+      if(p&&p!==b){b.mode=p.mode;b.v=p.v}renderInsp();renderCCF();refresh(false)};
     $('iCcf').oninput=e=>{b.ccf=e.target.value.trim();renderCCF();refresh(false)};
     $('iTop').onclick=()=>{S.top=b.id;renderTop();refresh(false)};
   }else if(sel&&sel.t==='l'&&S.links.find(l=>l.id===sel.id)){const l=S.links.find(l=>l.id===sel.id);
@@ -392,23 +410,63 @@ $('btnReset').onclick=()=>{S=example();sel=null;connect=false;pending=null;refre
 /* ---------- common cause (alpha factor) ---------- */
 function comb(n,k){let r=1;for(let i=1;i<=k;i++)r=r*(n-k+i)/i;return r}
 function defAlpha(m){const w=[];for(let k=2;k<=m;k++)w.push(1/(k-1));const s=w.reduce((a,b)=>a+b,0);return[0.95,...w.map(x=>+(0.05*x/s).toFixed(4))]}
-function groupsOf(){const g=new Map();for(const b of S.blocks){const c=(b.ccf||'').trim();if(!c)continue;if(!g.has(c))g.set(c,[]);g.get(c).push(b)}return g}
+function repPrimary(){const r=new Map();for(const b of S.blocks)if(b.rep&&!r.has(b.rep))r.set(b.rep,b);return r}
+const evKey=b=>b.rep?'rep:'+b.rep:b.id;
+function groupsOf(){const g=new Map(),pr=repPrimary();for(const b of S.blocks){const c=(b.ccf||'').trim();if(!c||(b.rep&&pr.get(b.rep)!==b))continue;if(!g.has(c))g.set(c,[]);g.get(c).push(b)}return g}
 function alphasFor(g,m){let a=S.ccf[g];if(!Array.isArray(a)||a.length!==m){a=defAlpha(m);S.ccf[g]=a}return a}
 function model(){
-  const m=byId(),ev={},ccfOf=new Map(),info={};
-  for(const b of S.blocks)ev[b.id]={name:b.name,p:pb(b)};
+  const ev={},ccfOf=new Map(),info={},be={},pr=repPrimary();
+  for(const b of S.blocks){const k=evKey(b);be[b.id]=k;if(!ev[k]){const src=b.rep?pr.get(b.rep):b;ev[k]={name:src.name,p:pb(src)}}}
   for(const[g,mem]of groupsOf()){const n=mem.length;if(n<2||n>6){info[g]={n,skip:true};continue}
     const a=alphasFor(g,n),sum=a.reduce((s,x)=>s+(+x||0),0)||1,al=a.map(x=>(+x||0)/sum);
     const at=al.reduce((s,x,i)=>s+(i+1)*x,0),Qt=mem.reduce((s,b)=>s+pb(b),0)/n;
     const Q=k=>k/comb(n-1,k-1)*al[k-1]/at*Qt;
-    for(const b of mem)ev[b.id]={name:b.name+' (indep.)',p:al[0]/at*pb(b)};
-    const ids=mem.map(b=>b.id);
-    for(let mk=1;mk<(1<<n);mk++){const sub=ids.filter((_,i)=>(mk>>i)&1);if(sub.length<2)continue;
-      const id='ccf:'+g+':'+sub.join(',');
-      ev[id]={name:`CCF ${g}: ${sub.map(x=>m[x].name).join(' + ')}`,p:Q(sub.length),ccf:true};
-      for(const x of sub){if(!ccfOf.has(x))ccfOf.set(x,[]);ccfOf.get(x).push(id)}}
+    for(const b of mem)ev[be[b.id]]={name:b.name+' (indep.)',p:al[0]/at*pb(b)};
+    for(let mk=1;mk<(1<<n);mk++){const sub=mem.filter((_,i)=>(mk>>i)&1);if(sub.length<2)continue;
+      const id='ccf:'+g+':'+sub.map(b=>be[b.id]).join(',');
+      ev[id]={name:`CCF ${g}: ${sub.map(b=>b.name).join(' + ')}`,p:Q(sub.length),ccf:true};
+      for(const b of sub){const x=be[b.id];if(!ccfOf.has(x))ccfOf.set(x,[]);ccfOf.get(x).push(id)}}
     info[g]={n,Q:al.map((_,i)=>Q(i+1)),Qt,sum};}
-  return{ev,ccfOf,info};
+  return{ev,ccfOf,info,be};
+}
+
+/* ---------- binary decision diagram (exact probability with repeated events) ---------- */
+function makeBDD(limit){
+  const V=[1e9,1e9],LO=[0,1],HI=[0,1],U=new Map(),C=new Map(),order=new Map(),vars=[];
+  function mk(v,lo,hi){if(lo===hi)return lo;const k=v+','+lo+','+hi;let r=U.get(k);
+    if(r===undefined){r=V.length;if(r>limit)throw new Error('BDD too large');V.push(v);LO.push(lo);HI.push(hi);U.set(k,r)}return r}
+  function ap(and,a,b){
+    if(and){if(!a||!b)return 0;if(a===1)return b;if(b===1)return a}else{if(a===1||b===1)return 1;if(!a)return b;if(!b)return a}
+    if(a===b)return a;if(a>b){const t=a;a=b;b=t}
+    const k=(and?'&':'|')+a+','+b;let r=C.get(k);if(r!==undefined)return r;
+    const v=Math.min(V[a],V[b]),ta=V[a]===v,tb=V[b]===v;
+    r=mk(v,ap(and,ta?LO[a]:a,tb?LO[b]:b),ap(and,ta?HI[a]:a,tb?HI[b]:b));C.set(k,r);return r}
+  const and=(a,b)=>ap(true,a,b),or=(a,b)=>ap(false,a,b);
+  function leaf(e){if(!order.has(e)){order.set(e,vars.length);vars.push(e)}return mk(order.get(e),0,1)}
+  function atleast(k,xs){const memo=new Map();
+    const f=(i,k)=>{if(k<=0)return 1;if(xs.length-i<k)return 0;const key=i+':'+k;let r=memo.get(key);
+      if(r===undefined){r=or(and(xs[i],f(i+1,k-1)),f(i+1,k));memo.set(key,r)}return r};
+    return f(0,k)}
+  function prob(root,q){const memo=new Map([[0,0],[1,1]]);
+    const P=n=>{let r=memo.get(n);if(r!==undefined)return r;const p=q(vars[V[n]]);r=p*P(HI[n])+(1-p)*P(LO[n]);memo.set(n,r);return r};
+    return P(root)}
+  return{and,or,leaf,atleast,prob};
+}
+/* Structure function: one BDD per block output, built from the same logic as the cut sets.
+   Every basic event is a single BDD variable, so an event that reaches the top through several paths counts once. */
+function structure(M){
+  const B=makeBDD(300000),m=byId(),ins=inputsOf(),memo=new Map(),stack=new Set();
+  const lf=e=>M.ev[e].p>0?B.leaf(e):0;
+  const own=id=>{const k=M.be[id];return[k,...(M.ccfOf.get(k)||[])].reduce((a,e)=>B.or(a,lf(e)),0)};
+  function F(id){
+    if(memo.has(id))return memo.get(id);if(stack.has(id)||!m[id])return 0;stack.add(id);
+    let r=own(id);const groups=new Map();
+    for(const l of ins.get(id)||[]){if(!m[l.from])continue;
+      if(!l.group)r=B.or(r,F(l.from));else{if(!groups.has(l.group))groups.set(l.group,[]);groups.get(l.group).push(l.from)}}
+    for(const[g,mem]of groups)r=B.or(r,B.atleast(voteK(id,g,mem.length),mem.map(F)));
+    stack.delete(id);memo.set(id,r);return r}
+  const P=n=>B.prob(n,e=>M.ev[e].p);
+  return{B,F,own,P};
 }
 
 /* ---------- analysis ---------- */
@@ -428,7 +486,7 @@ function analyze(){
   const M=model(),ev=M.ev,m=byId(),ins=inputsOf(),memo=new Map(),stack=new Set();
   function cs(id){
     if(memo.has(id))return memo.get(id);if(stack.has(id)||!m[id])return[];stack.add(id);
-    let sets=[[id],...(M.ccfOf.get(id)||[]).map(e=>[e])].filter(s=>ev[s[0]].p>0);const groups=new Map();
+    const k=M.be[id];let sets=[[k],...(M.ccfOf.get(k)||[]).map(e=>[e])].filter(s=>ev[s[0]].p>0);const groups=new Map();
     for(const l of ins.get(id)||[]){if(!m[l.from])continue;
       if(!l.group)sets=sets.concat(cs(l.from));else{if(!groups.has(l.group))groups.set(l.group,[]);groups.get(l.group).push(l.from)}}
     for(const[g,mem]of groups){const lists=mem.map(cs),k=voteK(id,g,mem.length);
@@ -440,79 +498,187 @@ function analyze(){
   const cp=c=>c.reduce((p,id)=>p*ev[id].p,1);
   const rows=cuts.map(c=>({c,p:cp(c)})).sort((a,b)=>b.p-a.p);
   const sum=rows.reduce((s,r)=>s+r.p,0);
-  const evs=[...new Set(cuts.flat())];let P=Math.min(1,sum),exact=false;
-  if(evs.length&&evs.length<=18){const idx=Object.fromEntries(evs.map((e,i)=>[e,i])),q=evs.map(e=>ev[e].p);
-    const masks=cuts.map(c=>c.reduce((mk,e)=>mk|(1<<idx[e]),0));P=0;
-    for(let st=0;st<(1<<evs.length);st++){if(!masks.some(mk=>(st&mk)===mk))continue;let p=1;for(let i=0;i<evs.length;i++)p*=(st>>i)&1?q[i]:1-q[i];P+=p}exact=true}
-  if(!evs.length){P=0;exact=true}
-  const imp=evs.map(e=>({e,v:sum?rows.filter(r=>r.c.includes(e)).reduce((s,r)=>s+r.p,0)/sum:0})).sort((a,b)=>b.v-a.v);
+  const evs=[...new Set(cuts.flat())];let P=Math.min(1,sum),exact=false,St=null,imp;
+  try{St=structure(M);const root=S.top?St.F(S.top):0;P=St.P(root);exact=true;
+    // Fussell–Vesely, exact: share of P(top) that disappears when the event cannot occur
+    imp=evs.map(e=>({e,v:P>0?Math.max(0,(P-St.B.prob(root,x=>x===e?0:ev[x].p))/P):0}));}
+  catch(err){St=null;imp=evs.map(e=>({e,v:sum?rows.filter(r=>r.c.includes(e)).reduce((s,r)=>s+r.p,0)/sum:0}))}
+  imp.sort((a,b)=>b.v-a.v);
   const spf=new Set(cuts.filter(c=>c.length===1).flat());
-  return{rows,sum,P,exact,imp,spf,ev,M};
+  return{rows,sum,P,exact,imp,spf,ev,M,St};
 }
 
 /* ---------- fault tree drawing ---------- */
-function buildTree(M){
-  const m=byId(),ins=inputsOf(),drawn=new Set();
+function buildTree(M,St){
+  const m=byId(),ins=inputsOf(),drawn=new Set(),gp=f=>St?St.P(f()):null;
   function internal(b,label){
-    const cc=M.ccfOf.get(b.id)||[];
-    const bn={k:'basic',id:b.id,label:cc.length?b.name+' independent failure':label,p:M.ev[b.id].p};
+    const k=M.be[b.id],cc=M.ccfOf.get(k)||[];
+    const bn={k:'basic',id:k,label:cc.length?b.name+' independent failure':label,p:M.ev[k].p};
     if(!cc.length)return bn;
-    return{k:'gate',g:'OR',label,ch:[bn,...cc.map(e=>({k:'basic',id:e,label:M.ev[e].name,p:M.ev[e].p,ccf:true}))]};
+    return{k:'gate',g:'OR',label,p:gp(()=>St.own(b.id)),ch:[bn,...cc.map(e=>({k:'basic',id:e,label:M.ev[e].name,p:M.ev[e].p,ccf:true}))]};
   }
   function node(id,stack,isTop){
     const b=m[id];if(!b)return null;const inp=(ins.get(id)||[]).filter(l=>m[l.from]);
     if(!inp.length&&!isTop)return internal(b,b.name+' fails');
     if(stack.has(id))return null;
-    if(drawn.has(id))return{k:'xfer',label:b.name+' output lost'};
+    if(drawn.has(id))return{k:'xfer',bid:id,label:b.name+' output lost',p:gp(()=>St.F(id))};
     drawn.add(id);const st=new Set(stack).add(id);
     const ch=[internal(b,b.name+' internal failure')],groups=new Map();
     for(const l of inp){if(!l.group){const n=node(l.from,st);if(n)ch.push(n)}else{if(!groups.has(l.group))groups.set(l.group,[]);groups.get(l.group).push(l.from)}}
     for(const[g,mem]of groups){const c=mem.map(f=>node(f,st)).filter(Boolean),n=mem.length,vk=voteK(id,g,n);
       if(!c.length)continue;
+      const p=gp(()=>St.B.atleast(vk,mem.map(St.F)));
       if(c.length===1)ch.push(c[0]);
-      else if(vk>=n)ch.push({k:'gate',g:'AND',label:`All ${g} sources lost`,ch:c});
-      else if(vk===1)ch.push({k:'gate',g:'OR',label:`Any ${g} source lost`,ch:c});
-      else ch.push({k:'gate',g:'VOTE',vk,vn:n,label:`${vk} or more of ${n} ${g} lost`,ch:c});}
-    return{k:'gate',g:'OR',label:isTop?(S.topText||b.name+' output lost'):b.name+' output lost',ch,top:isTop};
+      else if(vk>=n)ch.push({k:'gate',g:'AND',label:`All ${g} sources lost`,ch:c,p});
+      else if(vk===1)ch.push({k:'gate',g:'OR',label:`Any ${g} source lost`,ch:c,p});
+      else ch.push({k:'gate',g:'VOTE',vk,vn:n,label:`${vk} or more of ${n} ${g} lost`,ch:c,p});}
+    return{k:'gate',g:'OR',label:isTop?(S.topText||b.name+' output lost'):b.name+' output lost',ch,top:isTop,p:gp(()=>St.F(id))};
   }
-  return S.top?node(S.top,new Set(),true):null;
+  const root=S.top?node(S.top,new Set(),true):null;
+  // repeated events: the same basic event drawn under more than one branch
+  const uses=new Map();
+  (function walk(n){if(!n)return;if(n.k==='basic')uses.set(n.id,(uses.get(n.id)||0)+1);(n.ch||[]).forEach(walk)})(root);
+  (function mark(n){if(!n)return;if(n.k==='basic'&&uses.get(n.id)>1)n.rep=uses.get(n.id);(n.ch||[]).forEach(mark)})(root);
+  return{root,repeated:[...uses].filter(([,c])=>c>1).map(([id])=>id)};
 }
 function wrap(t,n){const w=t.split(/\s+/),L=[];let c='';for(const x of w){if((c+' '+x).trim().length>n&&c){L.push(c);c=x}else c=(c+' '+x).trim()}if(c)L.push(c);
   if(L.length>2){L.length=2;L[1]=L[1].slice(0,n-1)+'…'}return L}
-function drawTree(spf,M){
-  const root=buildTree(M),ft=$('ft');
-  if(!root){ft.setAttribute('viewBox','0 0 300 60');ft.setAttribute('width',300);ft.setAttribute('height',60);ft.innerHTML=`<text class="ft-txt" x="16" y="34">Add a block and choose a top event.</text>`;return}
-  const NW=136,LH=112,PAD=16;let leaf=0,maxD=0;
+/* Layout shared by the on-page SVG and the PowerPoint export (units: px at 96 dpi) */
+const FT={NW:136,LH:112,PAD:16,BH:38};
+let lastTree=null;
+function layTree(root){let leaf=0,maxD=0;
   (function lay(n,d){n.d=d;maxD=Math.max(maxD,d);if(n.k==='gate'){n.ch.forEach(c=>lay(c,d+1));n.x=(n.ch[0].x+n.ch.at(-1).x)/2}else n.x=leaf++})(root,0);
-  const Wd=leaf*NW+PAD*2,Hd=(maxD+1)*LH+PAD;let o='';
-  const cx=n=>PAD+n.x*NW+NW/2,cy=n=>PAD+n.d*LH;
-  (function dr(n){const x=cx(n),y=cy(n),bw=NW-14,s=n.k==='basic'&&spf.has(n.id),z=n.k==='basic'&&!(n.p>0);
+  return{Wd:leaf*FT.NW+FT.PAD*2,Hd:(maxD+1)*FT.LH+FT.PAD}}
+const ftX=n=>FT.PAD+n.x*FT.NW+FT.NW/2,ftY=n=>FT.PAD+n.d*FT.LH;
+function drawTree(spf,M,St){
+  const T=buildTree(M,St),root=T.root,ft=$('ft');
+  if(!root){lastTree=null;ft.setAttribute('viewBox','0 0 300 60');ft.style.maxWidth='300px';ft.style.aspectRatio='5';ft.dataset.w=300;ft.dataset.h=60;
+    ft.innerHTML=`<text class="ft-txt" x="16" y="34">Add a block and choose a top event.</text>`;return T}
+  const{Wd,Hd}=layTree(root);let o='';
+  (function dr(n){const x=ftX(n),y=ftY(n),bw=FT.NW-14,s=n.k==='basic'&&spf.has(n.id),z=n.k==='basic'&&!(n.p>0);
     const lines=wrap(n.label,20);
-    o+=`<g${z?' class="ft-zero"':''}><rect class="ft-box${n.top?' top':''}${s?' spf':''}" x="${x-bw/2}" y="${y}" width="${bw}" height="38" rx="3"/>`;
+    o+=`<g${z?' class="ft-zero"':''}><title>${esc(n.label)}${n.p!=null?' · P = '+fmt(n.p):''}${n.rep?` · repeated ${n.rep}× in this tree, counted once`:''}</title><rect class="ft-box${n.top?' top':''}${s?' spf':''}" x="${x-bw/2}" y="${y}" width="${bw}" height="${FT.BH}" rx="3"/>`;
     lines.forEach((t,i)=>o+=`<text class="ft-txt${n.top?' b':''}" x="${x}" y="${y+(lines.length===1?23:16+i*13)}" text-anchor="middle">${esc(t)}</text>`);
-    const y0=y+42;o+=`<line class="ft-wire" x1="${x}" y1="${y+38}" x2="${x}" y2="${y0}"/>`;
+    const y0=y+42;o+=`<line class="ft-wire" x1="${x}" y1="${y+FT.BH}" x2="${x}" y2="${y0}"/>`;
     if(n.k==='gate'){
       o+=n.g!=='AND'?`<path class="ft-gate" d="M${x-15},${y0+24} Q${x-15},${y0+7} ${x},${y0} Q${x+15},${y0+7} ${x+15},${y0+24} Q${x},${y0+16} ${x-15},${y0+24}Z"/>`
         :`<path class="ft-gate" d="M${x-14},${y0+24} L${x-14},${y0+11} A14 11 0 0 1 ${x+14},${y0+11} L${x+14},${y0+24}Z"/>`;
-      o+=`<text class="ft-gname" x="${x}" y="${y0+19}" text-anchor="middle">${n.g==='VOTE'?n.vk+'/'+n.vn:n.g}</text></g>`;
-      const yb=n.g!=='AND'?y0+20:y0+24,ym=y+LH-14;
-      for(const c of n.ch){const xc=cx(c);o+=`<path class="ft-wire" d="M${x},${yb} V${ym} H${xc} V${cy(c)}"/>`;dr(c)}
+      o+=`<text class="ft-gname" x="${x}" y="${y0+19}" text-anchor="middle">${n.g==='VOTE'?n.vk+'/'+n.vn:n.g}</text>`;
+      if(n.p!=null)o+=`<text class="ft-gp" x="${x+19}" y="${y0+14}">${fmt(n.p)}</text>`;
+      o+='</g>';
+      const yb=n.g!=='AND'?y0+20:y0+24,ym=y+FT.LH-14;
+      for(const c of n.ch){const xc=ftX(c);o+=`<path class="ft-wire" d="M${x},${yb} V${ym} H${xc} V${ftY(c)}"/>`;dr(c)}
     }else if(n.k==='basic'){
-      o+=`<circle class="ft-basic${n.ccf?' ccf':''}${s?' spf':''}" cx="${x}" cy="${y0+12}" r="12"/><text class="ft-p" x="${x}" y="${y0+40}" text-anchor="middle">${fmt(n.p)}</text></g>`;
+      o+=`<circle class="ft-basic${n.ccf?' ccf':''}${s?' spf':''}${n.rep?' rep':''}" cx="${x}" cy="${y0+12}" r="12"/><text class="ft-p" x="${x}" y="${y0+40}" text-anchor="middle">${fmt(n.p)}</text>`+
+        (n.rep?`<text class="ft-rep" x="${x+16}" y="${y0+6}">R×${n.rep}</text>`:'')+`</g>`;
     }else{
       o+=`<path class="ft-xfer" d="M${x},${y0} L${x+14},${y0+24} L${x-14},${y0+24}Z"/><text class="ft-xtxt" x="${x}" y="${y0+40}" text-anchor="middle">see above</text></g>`;
     }})(root);
-  ft.setAttribute('viewBox',`0 0 ${Wd} ${Hd}`);ft.setAttribute('width',Wd);ft.setAttribute('height',Hd);ft.innerHTML=o;
+  // Fit: scale to the panel width (never above natural size) and cap height to the viewport, so the whole tree is visible without scrolling
+  ft.setAttribute('viewBox',`0 0 ${Wd} ${Hd}`);ft.removeAttribute('width');ft.removeAttribute('height');
+  ft.style.maxWidth=Wd+'px';ft.style.aspectRatio=`${Wd} / ${Hd}`;ft.dataset.w=Wd;ft.dataset.h=Hd;ft.innerHTML=o;
+  lastTree={root,Wd,Hd,spf};
+  return T;
+}
+
+/* ---------- PowerPoint export (native, editable shapes) ---------- */
+let pptxP=null;
+const loadPptx=()=>pptxP||(pptxP=new Promise((res,rej)=>{if(window.PptxGenJS)return res(window.PptxGenJS);
+  const sc=document.createElement('script');sc.src='https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js';
+  sc.onload=()=>window.PptxGenJS?res(window.PptxGenJS):rej(new Error('PptxGenJS missing'));sc.onerror=()=>{pptxP=null;rej(new Error('load failed'))};document.head.appendChild(sc)}));
+const PC={ink:'16202B',muted:'5B6774',line:'8995A3',sunk:'EEF0F2',lblLine:'CDD3DA',accent:'B45309',accentSoft:'FBEAD6',crit:'B42318',critSoft:'FDE7E4',flow:'2F5D8A',white:'FFFFFF'};
+async function ibdPptx(){
+  if(!S.blocks.length)throw new Error('no blocks');
+  const Pptx=await loadPptx(),pres=new Pptx(),m=byId(),C=PC,F='Arial',MONO='Courier New';
+  // crop to the blocks' bounding box, with room for the TOP tag and connection curves
+  const bx=Math.max(0,Math.min(...S.blocks.map(b=>b.x))-24),by=Math.max(0,Math.min(...S.blocks.map(b=>b.y))-24);
+  const cw=Math.max(...S.blocks.map(b=>b.x+W))+24-bx,ch=Math.max(...S.blocks.map(b=>b.y+H))+24-by;
+  const SW=13.333,SH=7.5,TITLE=0.9,MARGIN=0.3;
+  const k=Math.min(1.25,(SW-2*MARGIN)/(cw/96),(SH-TITLE-2*MARGIN)/(ch/96));
+  const u=v=>v/96*k,ox=(SW-u(cw))/2,oy=TITLE+MARGIN+(SH-TITLE-2*MARGIN-u(ch))/2,X=v=>ox+u(v-bx),Y=v=>oy+u(v-by),pt=px=>Math.max(4,px*.75*k),SH_=pres.ShapeType;
+  pres.layout='LAYOUT_WIDE';pres.title='System architecture';
+  const slide=pres.addSlide();slide.background={color:C.white};
+  slide.addText([{text:'System architecture · internal block diagram',options:{fontSize:20,bold:true,color:C.ink,breakLine:true}},
+    {text:`${S.blocks.length} blocks · ${S.links.length} connections · top event: ${S.topText||'—'} (loss of ${m[S.top]?.name||'?'} output) · mission ${mT()} h`,options:{fontSize:11,color:C.muted}}],
+    {x:MARGIN,y:0.15,w:SW-2*MARGIN,h:TITLE-0.1,fontFace:F,valign:'top',margin:0});
+  // connections first, so blocks sit on top
+  for(const l of S.links){const a=m[l.from],b=m[l.to];if(!a||!b)continue;const g=bezier(a,b);
+    const dx=Math.max(40,Math.abs(g.tx-g.sx)/2),P=[[g.sx,g.sy],[g.sx+dx,g.sy],[g.tx-dx,g.ty],[g.tx-2,g.ty]];
+    const x0=Math.min(...P.map(q=>q[0])),y0=Math.min(...P.map(q=>q[1])),x1=Math.max(...P.map(q=>q[0])),y1=Math.max(...P.map(q=>q[1]));
+    const r=q=>({x:u(q[0]-x0),y:u(q[1]-y0)});
+    slide.addShape(SH_.custGeom,{x:X(x0),y:Y(y0),w:Math.max(.01,u(x1-x0)),h:Math.max(.01,u(y1-y0)),
+      points:[r(P[0]),Object.assign(r(P[3]),{curve:{type:'cubic',x1:r(P[1]).x,y1:r(P[1]).y,x2:r(P[2]).x,y2:r(P[2]).y}})],
+      line:{color:C.flow,width:Math.max(.5,1.6*.75*k),dashType:l.group?'dash':'solid',endArrowType:'triangle'}});
+    for(const[px,py]of[[g.sx,g.sy],[g.tx,g.ty]])slide.addShape(SH_.rect,{x:X(px-4),y:Y(py-4),w:u(8),h:u(8),fill:{color:C.white},line:{color:C.line,width:Math.max(.5,.9*k)}});
+    const t=linkText(l);if(t){const w=t.length*6.4+10,mid=g.mid;
+      slide.addText(t,{shape:SH_.roundRect,rectRadius:u(3),x:X(mid[0]-w/2),y:Y(mid[1]-9),w:u(w),h:u(17),fontFace:MONO,fontSize:pt(10.5),color:C.flow,align:'center',valign:'middle',margin:0,
+        fill:{color:C.sunk},line:{color:C.lblLine,width:.5}});}}
+  for(const b of S.blocks){const top=S.top===b.id;
+    slide.addText([{text:'«'+(b.st||'part')+'»',options:{fontFace:MONO,fontSize:pt(10),color:C.muted,breakLine:true}},
+      {text:b.name,options:{fontFace:F,fontSize:pt(Math.max(8,Math.min(13,(W-16)/(b.name.length*.62)))),bold:true,color:C.ink,breakLine:true}},
+      {text:rateText(b),options:{fontFace:MONO,fontSize:pt(10.5),color:C.muted}}],
+      {shape:SH_.rect,x:X(b.x),y:Y(b.y),w:u(W),h:u(H),align:'left',valign:'middle',margin:pt(6),fill:{color:C.white},
+        line:{color:top?C.accent:C.line,width:Math.max(.5,(top?2:1.2)*.75*k)}});
+    if(b.rep)slide.addText('≡ '+b.rep,{x:X(b.x+2),y:Y(b.y-15),w:u(W-40),h:u(12),fontFace:MONO,fontSize:pt(9.5),bold:true,color:C.flow,align:'left',valign:'middle',margin:0});
+    if(b.ccf)slide.addText('CCF·'+b.ccf,{x:X(b.x+W-70),y:Y(b.y+3),w:u(64),h:u(12),fontFace:MONO,fontSize:pt(9.5),bold:true,color:C.flow,align:'right',valign:'middle',margin:0});
+    if(top)slide.addText('TOP',{shape:SH_.rect,x:X(b.x+W-34),y:Y(b.y-8),w:u(34),h:u(15),fontFace:MONO,fontSize:pt(9.5),bold:true,color:C.white,align:'center',valign:'middle',margin:0,fill:{color:C.accent},line:{color:C.accent,width:.5}});}
+  slide.addNotes('Generated by Fault Tree Workbench. Blocks, connections (with arrowheads), ports and flow labels are separate editable shapes. Dashed connections are redundancy groups; ≡ TAG above a block marks a shared failure event (blocks with the same tag are one physical failure); k/n on a label means the group is lost when k of its n inputs are lost.');
+  return pres.write({outputType:'arraybuffer'});
+}
+async function ftPptx(){
+  const L=lastTree;if(!L)throw new Error('no tree');
+  const Pptx=await loadPptx(),pres=new Pptx(),A=analyze();
+  const MAX=56,TITLE=0.9,MARGIN=0.3;          // PowerPoint's largest slide side is 56 in
+  let k=Math.min(1,(MAX-2*MARGIN)/(L.Wd/96),(MAX-TITLE-2*MARGIN)/(L.Hd/96));
+  const tw=L.Wd/96*k,th=L.Hd/96*k,SW=Math.max(13.333,tw+2*MARGIN),SH=Math.max(7.5,th+TITLE+2*MARGIN);
+  pres.defineLayout({name:'FT',width:SW,height:SH});pres.layout='FT';pres.title=S.topText||'Fault tree';
+  const ox=(SW-tw)/2,oy=TITLE+MARGIN,u=v=>v/96*k,X=v=>ox+u(v),Y=v=>oy+u(v),pt=px=>Math.max(4,px*0.75*k);
+  const slide=pres.addSlide();slide.background={color:'FFFFFF'};
+  const C=PC;
+  const F='Arial',SH_=pres.ShapeType;
+  slide.addText([{text:'Fault tree · '+(S.topText||'top event'),options:{fontSize:20,bold:true,color:C.ink,breakLine:true}},
+    {text:`P(top) = ${fmt(A.P)} per ${mT()} h mission · ${A.exact?'exact (BDD, repeated events counted once)':'rare-event approximation'} · ${A.rows.length} minimal cut sets`,options:{fontSize:11,color:C.muted}}],
+    {x:MARGIN,y:0.15,w:SW-2*MARGIN,h:TITLE-0.1,fontFace:F,valign:'top',margin:0});
+  const wire=(x1,y1,x2,y2)=>slide.addShape(SH_.line,{x:X(Math.min(x1,x2)),y:Y(Math.min(y1,y2)),w:u(Math.abs(x2-x1)),h:u(Math.abs(y2-y1)),line:{color:C.line,width:Math.max(.5,1.1*.75*k)}});
+  const txt=(t,x,y,w,h,o)=>slide.addText(t,Object.assign({x:X(x),y:Y(y),w:u(w),h:u(h),fontFace:F,margin:0,align:'center',valign:'middle'},o));
+  const stroke=w=>Math.max(.5,w*.75*k);
+  (function dr(n){const x=ftX(n),y=ftY(n),bw=FT.NW-14,s=n.k==='basic'&&L.spf.has(n.id),z=n.k==='basic'&&!(n.p>0),tr=z?50:0;
+    slide.addText(wrap(n.label,20).join('\n'),{shape:SH_.rect,x:X(x-bw/2),y:Y(y),w:u(bw),h:u(FT.BH),fontFace:F,fontSize:pt(11),bold:!!n.top,color:C.ink,align:'center',valign:'middle',margin:0,
+      fill:{color:n.top?C.accentSoft:s?C.critSoft:C.white,transparency:tr},line:{color:n.top?C.accent:s?C.crit:C.line,width:stroke(n.top?2:s?1.6:1),transparency:tr}});
+    const y0=y+42;wire(x,y+FT.BH,x,y0);
+    if(n.k==='gate'){
+      const sx=u(1),pts=n.g!=='AND'
+        ?[{x:0,y:24},{x:15,y:0,curve:{type:'quadratic',x1:0,y1:7}},{x:30,y:24,curve:{type:'quadratic',x1:30,y1:7}},{x:0,y:24,curve:{type:'quadratic',x1:15,y1:16}},{close:true}]
+        :[{x:0,y:24},{x:0,y:11},{x:14,y:0,curve:{type:'cubic',x1:0,y1:4.9,x2:6.3,y2:0}},{x:28,y:11,curve:{type:'cubic',x1:21.7,y1:0,x2:28,y2:4.9}},{x:28,y:24},{close:true}];
+      const gw=n.g!=='AND'?30:28;
+      slide.addShape(SH_.custGeom,{x:X(x-gw/2),y:Y(y0),w:u(gw),h:u(24),points:pts.map(q=>q.close?q:Object.assign({},q,{x:q.x*sx,y:q.y*sx},q.curve?{curve:Object.assign({},q.curve,
+        {x1:q.curve.x1*sx,y1:q.curve.y1*sx},q.curve.x2!=null?{x2:q.curve.x2*sx,y2:q.curve.y2*sx}:{})}:{})),fill:{color:C.white},line:{color:C.ink,width:stroke(1.3)}});
+      txt(n.g==='VOTE'?n.vk+'/'+n.vn:n.g,x-15,y0+11,30,11,{fontSize:pt(8.5),bold:true,color:C.ink,fontFace:'Courier New'});
+      if(n.p!=null)txt(fmt(n.p),x+18,y0+6,52,12,{fontSize:pt(10),color:C.accent,align:'left',fontFace:'Courier New'});
+      const yb=n.g!=='AND'?y0+20:y0+24,ym=y+FT.LH-14;
+      for(const c of n.ch){const xc=ftX(c);wire(x,yb,x,ym);wire(x,ym,xc,ym);wire(xc,ym,xc,ftY(c));dr(c)}
+    }else if(n.k==='basic'){
+      slide.addShape(SH_.ellipse,{x:X(x-12),y:Y(y0),w:u(24),h:u(24),fill:{color:s?C.critSoft:C.white,transparency:tr},
+        line:{color:s?C.crit:n.ccf?C.flow:C.ink,width:stroke(n.rep?2.4:1.3),dashType:n.ccf?'dash':'solid',transparency:tr}});
+      txt(fmt(n.p),x-40,y0+30,80,13,{fontSize:pt(10),color:C.muted,fontFace:'Courier New'});
+      if(n.rep)txt('R×'+n.rep,x+15,y0-2,34,12,{fontSize:pt(9.5),bold:true,color:C.flow,align:'left',fontFace:'Courier New'});
+    }else{
+      slide.addShape(SH_.triangle,{x:X(x-14),y:Y(y0),w:u(28),h:u(24),fill:{color:C.white},line:{color:C.flow,width:stroke(1.3)}});
+      txt('see above',x-40,y0+30,80,13,{fontSize:pt(10),color:C.flow,fontFace:'Courier New'});
+    }})(L.root);
+  slide.addNotes('Generated by Fault Tree Workbench. Every box, gate, event and wire is a separate editable shape. R×n marks a basic event that appears n times in the tree; it is counted once in all probabilities.');
+  return pres.write({outputType:'arraybuffer'});
 }
 
 /* ---------- results ---------- */
 function renderResults(){
-  const A=analyze(),m=A.ev;
+  const A=analyze(),m=A.ev,T=drawTree(A.spf,A.M,A.St);
   const oneIn=A.P>0?Math.round(1/A.P).toLocaleString():'—';
-  $('readout').innerHTML=`<div><span class="k">P(${esc(S.topText||'top event')})</span><span class="v top">${fmt(A.P)}</span><span class="s">per ${mT()} h mission · ${A.exact?'exact':'rare-event approx.'}</span></div>
+  $('readout').innerHTML=`<div><span class="k">P(${esc(S.topText||'top event')})</span><span class="v top">${fmt(A.P)}</span><span class="s">per ${mT()} h mission · ${A.exact?'exact · repeated events once':'rare-event approx.'}</span></div>
     <div><span class="k">Occurs about once in</span><span class="v">${oneIn}</span><span class="s">missions (1 / P)</span></div>
     <div><span class="k">Minimal cut sets</span><span class="v">${A.rows.length}</span><span class="s">smallest failure combinations</span></div>
-    <div><span class="k">Single-point failures</span><span class="v${A.spf.size?' crit':''}">${A.spf.size}</span><span class="s">${A.spf.size?[...A.spf].map(e=>esc(m[e].name)).join(', '):'none'}</span></div>`;
+    <div><span class="k">Single-point failures</span><span class="v${A.spf.size?' crit':''}">${A.spf.size}</span><span class="s">${A.spf.size?[...A.spf].map(e=>esc(m[e].name)).join(', '):'none'}</span></div>
+    <div><span class="k">Repeated events</span><span class="v">${T.repeated.length}</span><span class="s">${T.repeated.length?T.repeated.map(e=>esc(m[e].name)).join(', ')+' · each counted once':'none in this tree'}</span></div>`;
   $('csCount').textContent=`${A.rows.length} sets · sum ${fmt(A.sum)}`;
   $('csBody').innerHTML=A.rows.map(r=>{const sh=A.sum?r.p/A.sum:0;
     const one=r.c.length===1,cc=one&&m[r.c[0]].ccf;
@@ -521,7 +687,6 @@ function renderResults(){
   document.querySelectorAll('[data-gq]').forEach(el=>{const i=A.M.info[el.dataset.gq];if(!i||i.skip){el.textContent='';return}
     el.innerHTML=`Q<sub>t</sub> ${fmt(i.Qt)} · `+i.Q.map((q,k)=>`Q<sub>${k+1}</sub> ${fmt(q)}`).join(' · ')+
       (Math.abs(i.sum-1)>1e-6?`<br><span class="w">α values sum to ${i.sum.toFixed(3)}; normalised to 1</span>`:'');});
-  drawTree(A.spf,A.M);
 }
 function renderCCF(){
   const G=groupsOf();let h='<h2>Common-cause groups · alpha factor</h2>',gi=0;
@@ -551,7 +716,9 @@ const EXPORT_CSS=`text{font-family:"IBM Plex Sans",Arial,sans-serif}
 .ft-txt{font:11px "IBM Plex Sans",Arial,sans-serif;fill:#16202b}.ft-txt.b{font-weight:600}.ft-gate,.ft-basic{fill:#fff;stroke:#16202b;stroke-width:1.3}
 .ft-gname{font:600 8.5px "IBM Plex Mono",Menlo,monospace;fill:#16202b}.ft-basic.ccf{stroke:#2f5d8a;stroke-dasharray:3 2}.ft-basic.spf{stroke:#b42318;fill:#fde7e4}
 .ft-zero{opacity:.45}.ft-p{font:10px "IBM Plex Mono",Menlo,monospace;fill:#5b6774}.ft-wire{fill:none;stroke:#8995a3;stroke-width:1.1}
-.ft-xfer{fill:#fff;stroke:#2f5d8a;stroke-width:1.3}.ft-xtxt{font:10px "IBM Plex Mono",Menlo,monospace;fill:#2f5d8a}`;
+.ft-xfer{fill:#fff;stroke:#2f5d8a;stroke-width:1.3}.ft-xtxt{font:10px "IBM Plex Mono",Menlo,monospace;fill:#2f5d8a}
+.ft-gp{font:10px "IBM Plex Mono",Menlo,monospace;fill:#b45309}.ft-basic.rep{stroke-width:2.4}.ft-rep{font:600 9.5px "IBM Plex Mono",Menlo,monospace;fill:#2f5d8a}
+.blk .reptag{font:600 9.5px "IBM Plex Mono",Menlo,monospace;fill:#2f5d8a}`;
 function svgExport(el,w,h){
   const c=el.cloneNode(true);c.removeAttribute('id');c.removeAttribute('style');c.setAttribute('xmlns','http://www.w3.org/2000/svg');
   c.setAttribute('width',w);c.setAttribute('height',h);
@@ -568,7 +735,7 @@ function ibdSvg(){
   const c=$('ibd').cloneNode(true);c.setAttribute('viewBox',`0 -12 ${w} ${h+12}`);
   return svgExport(c,w,h+12);
 }
-function ftSvg(){const f=$('ft');return svgExport(f,f.getAttribute('width'),f.getAttribute('height'))}
+function ftSvg(){const f=$('ft');return svgExport(f,f.dataset.w,f.dataset.h)}
 const b64e=s=>btoa(unescape(encodeURIComponent(s))),b64d=s=>decodeURIComponent(escape(atob(s)));
 function ident(s,used){let x=String(s).replace(/[^A-Za-z0-9_]/g,'_').replace(/_+/g,'_').replace(/^_|_$/g,'')||'X';if(/^[0-9]/.test(x))x='_'+x;let y=x,i=2;while(used.has(y))y=x+'_'+i++;used.add(y);return y}
 const real=v=>v>0?v.toExponential(4).toUpperCase().replace('E+0','E0'):'0.0';
@@ -589,6 +756,7 @@ function toSysML(){
     L.push(`  part def ${defN[b.id]} {   // «${b.st||'part'}»`);
     L.push(b.mode==='prob'?`    attribute fixedFailureProbability : Real = ${real(b.v)};`:`    attribute failureRate : Real = ${real(b.v)};   // per hour`);
     if(b.ccf)L.push(`    attribute commonCauseGroup : String = ${sstr(b.ccf)};`);
+    if(b.rep)L.push(`    attribute sharedFailureEvent : String = ${sstr(b.rep)};`);
     for(const g of new Set(S.links.filter(l=>l.to===b.id&&l.group).map(l=>l.group))){const n=groupSize(b.id,g),k=voteK(b.id,g,n);
       if(n>1&&k<n)L.push(`    attribute lossThreshold_${String(g).replace(/[^A-Za-z0-9_]/g,'_')} : Integer = ${k};   // group ${g.replace(/\*\//g,'')} lost when ${k} of ${n} inputs lost`);}
     for(const p of port[b.id])L.push('    '+p);
@@ -610,7 +778,7 @@ function toOpenPSA(){
   const beRef=id=>{usedEv.add(id);return`<basic-event name="${ename(id)}"/>`};
   function gate(id){
     if(done.has(id))return true;if(stack.has(id))return false;stack.add(id);
-    const args=[beRef(id),...(M.ccfOf.get(id)||[]).map(beRef)],groups=new Map();
+    const k=M.be[id],args=[beRef(k),...(M.ccfOf.get(k)||[]).map(beRef)],groups=new Map();
     for(const l of ins.get(id)||[]){if(!m[l.from])continue;
       if(!l.group){if(gate(l.from))args.push(`<gate name="${gname(l.from)}"/>`)}
       else{if(!groups.has(l.group))groups.set(l.group,[]);groups.get(l.group).push(l.from)}}
@@ -639,11 +807,14 @@ ${evs.join('\n')}
 let dlP=null;
 const downloads=()=>dlP||(dlP=(window.claude&&window.claude.use?window.claude.use('downloads'):Promise.resolve(null)).catch(()=>null));
 function showSheet(title,note,text){$('sheetTitle').textContent=title;$('sheetNote').textContent=note;$('sheetText').value=text;$('sheet').hidden=false;$('sheetText').focus();$('sheetText').select()}
+function blobSave(filename,data){const u=URL.createObjectURL(new Blob([data]));const a=document.createElement('a');
+  a.href=u;a.download=filename;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),5000)}
 async function offer(filename,text,label,note){
   const d=await downloads();
   if(d){try{await d.save({filename,data:text});status(`${label} saved as ${filename}`);return}
     catch(e){if(e&&e.code==='declined'){status('Save cancelled');return}
       if(e&&e.code==='rate_limited'){status('A save prompt is already open',true);return}}}
+  if(typeof text!=='string'){blobSave(filename,text);status(`${label} downloaded as ${filename}`);return}
   showSheet(label,(note?note+' ':'')+`Saving isn't available in this view, so copy the text below into a file named ${filename.replace(/\.txt$/,'')}.`,text);
 }
 $('sheetClose').onclick=()=>{$('sheet').hidden=true};
@@ -654,6 +825,13 @@ $('sheetCopy').onclick=()=>{const t=$('sheetText');const ok=()=>{$('sheetCopy').
 $('fSave').onclick=()=>offer('ft-workbench-project.json',JSON.stringify(S,null,2),'Project');
 $('fIbdSvg').onclick=()=>offer('ibd.svg',ibdSvg(),'IBD SVG');
 $('fSysml').onclick=()=>offer('ibd.sysml.txt',toSysML(),'SysML v2','Saved with a .txt ending because .sysml files cannot be saved from here; rename it to ibd.sysml.');
+function pptxButton(id,build,filename,label,ready){$(id).onclick=async()=>{const btn=$(id),why=ready();if(why){status(why,true);return}
+  btn.disabled=true;status(`Building ${label}…`);
+  try{await offer(filename,await build(),label)}
+  catch(e){status(e&&e.message==='load failed'?"Couldn't load the PowerPoint library. Check your internet connection.":`Couldn't build the ${label} file.`,true)}
+  finally{btn.disabled=false}}}
+pptxButton('fIbdPptx',ibdPptx,'ibd.pptx','IBD PowerPoint',()=>S.blocks.length?'':'Add a block first');
+pptxButton('fFtPptx',ftPptx,'fault-tree.pptx','Fault tree PowerPoint',()=>lastTree?'':'Choose a top event first');
 $('fFtSvg').onclick=()=>offer('fault-tree.svg',ftSvg(),'Fault tree SVG');
 $('fOpsa').onclick=()=>offer('fault-tree.opsa.xml.txt',toOpenPSA(),'Open-PSA XML','Saved with a .txt ending because .xml files cannot be saved from here; rename it to fault-tree.xml.');
 $('fLoad').onclick=()=>$('fileIn').click();
