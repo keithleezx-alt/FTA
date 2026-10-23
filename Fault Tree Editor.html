@@ -1,0 +1,646 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Fault Tree Editor</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: file bar, results, fault tree + inspector, event and cut-set tables below. Shares the workbench design tokens. */
+:root{
+  --bg:#eef0f2; --surface:#ffffff; --sunk:#e3e6ea; --ink:#16202b; --muted:#5b6774;
+  --line:#cdd3da; --line-strong:#8995a3; --accent:#b45309; --accent-soft:#fbead6;
+  --flow:#2f5d8a; --critical:#b42318; --critical-soft:#fde7e4; --scrim:rgba(14,19,24,.45);
+  --f-display:"IBM Plex Sans Condensed","Arial Narrow",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#12171d; --surface:#1a2129; --sunk:#0e1318; --ink:#e4e9ee; --muted:#93a0ad;
+  --line:#2c3743; --line-strong:#5a6877; --accent:#f0a24a; --accent-soft:#3a2a17;
+  --flow:#7fb0e0; --critical:#f2786b; --critical-soft:#3d1d1a; --scrim:rgba(0,0,0,.6); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#12171d; --surface:#1a2129; --sunk:#0e1318; --ink:#e4e9ee; --muted:#93a0ad;
+  --line:#2c3743; --line-strong:#5a6877; --accent:#f0a24a; --accent-soft:#3a2a17;
+  --flow:#7fb0e0; --critical:#f2786b; --critical-soft:#3d1d1a; --scrim:rgba(0,0,0,.6); color-scheme:dark}
+html,body{background:var(--bg);color:var(--ink)}
+body{font-family:var(--f-body);font-size:14px;line-height:1.45;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 40px}
+.wrap{max-width:1280px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+header{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:8px 20px}
+h1{font-family:var(--f-display);font-weight:600;font-size:26px;letter-spacing:.01em;margin:0;text-wrap:balance}
+h1 .arrow{color:var(--accent)}
+.sub{color:var(--muted);margin:2px 0 0;max-width:70ch}
+.tag{font-family:var(--f-mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--accent);border:1px solid var(--accent);padding:2px 7px;border-radius:3px;white-space:nowrap}
+h2{font-family:var(--f-display);font-weight:600;font-size:13px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin:0}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:6px;min-width:0}
+.panel-h{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;padding:10px 14px;border-bottom:1px solid var(--line)}
+.work{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:18px;align-items:start}
+@media (max-width:880px){.work{grid-template-columns:minmax(0,1fr)}}
+.toolbar{display:flex;flex-wrap:wrap;gap:6px}
+button{font:500 13px/1 var(--f-body);color:var(--ink);background:var(--surface);border:1px solid var(--line-strong);border-radius:4px;padding:8px 11px;cursor:pointer}
+button:hover{background:var(--sunk)}
+button.on{background:var(--accent);border-color:var(--accent);color:var(--surface)}
+button.danger{color:var(--critical);border-color:var(--critical)}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.filebar{display:flex;flex-wrap:wrap;align-items:center;gap:10px 22px;padding:10px 14px}
+.fgroup{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.flabel{font:600 11px var(--f-display);letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin-right:2px}
+#status{flex:1 1 200px;text-align:right;min-width:0}
+#status.err{color:var(--critical)}
+.hint{font-size:12.5px;color:var(--muted);padding:8px 14px;border-top:1px solid var(--line);display:flex;flex-wrap:wrap;gap:4px 18px}
+.hint b{color:var(--accent);font-weight:600}
+.legend{display:inline-flex;align-items:center;gap:6px}
+.scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+#ibd{display:block;width:100%;min-width:860px;height:auto;background:var(--sunk);
+  background-image:radial-gradient(var(--line) 1px,transparent 1px);background-size:20px 20px}
+.blk{cursor:grab;touch-action:none}
+.blk rect.body{fill:var(--surface);stroke:var(--line-strong);stroke-width:1.2}
+.blk.sel rect.body{stroke:var(--flow);stroke-width:2.4}
+.blk.pending rect.body{stroke:var(--accent);stroke-width:2.4;stroke-dasharray:5 3}
+.blk.top rect.body{stroke:var(--accent);stroke-width:2}
+.blk .name{font:600 13px var(--f-body);fill:var(--ink)}
+.blk .rate{font:11px var(--f-mono);fill:var(--muted)}
+.blk .stereo{font:10px var(--f-mono);fill:var(--muted)}
+.blk .toptag{font:600 9.5px var(--f-mono);fill:var(--surface);letter-spacing:.08em}
+.blk .toptagbg{fill:var(--accent)}
+.blk .ccftag{font:600 9.5px var(--f-mono);fill:var(--flow)}
+.port{fill:var(--surface);stroke:var(--line-strong);stroke-width:1.2}
+.link{fill:none;stroke:var(--flow);stroke-width:1.6}
+.link.grp{stroke-dasharray:6 4}
+.link.sel{stroke-width:3}
+.linkhit{fill:none;stroke:transparent;stroke-width:16;cursor:pointer}
+.lbl-bg{fill:var(--sunk);stroke:var(--line)}
+.lbl{font:10.5px var(--f-mono);fill:var(--flow)}
+#arrowhead path{fill:var(--flow)}
+.insp{display:flex;flex-direction:column}
+.sect{padding:12px 14px;display:flex;flex-direction:column;gap:10px;border-bottom:1px solid var(--line)}
+.sect:last-child{border-bottom:0}
+label.f{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted)}
+input,select{font:14px var(--f-body);color:var(--ink);background:var(--bg);border:1px solid var(--line-strong);border-radius:4px;padding:7px 9px;width:100%;box-sizing:border-box}
+input.mono{font-family:var(--f-mono)}
+input.bad{border-color:var(--critical)}
+.derived{font:12px var(--f-mono);color:var(--muted);margin:-4px 0 0}
+.note{font-size:12px;color:var(--muted);margin:0}
+.empty{color:var(--muted);font-size:13px;margin:0}
+.row{display:flex;gap:6px;flex-wrap:wrap}
+.ccfg{display:flex;flex-direction:column;gap:6px;padding-top:4px}
+.ccfh{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:baseline}
+.ccfh b{font:600 13px var(--f-mono);color:var(--flow)}
+.alphas{display:grid;grid-template-columns:repeat(auto-fill,minmax(70px,1fr));gap:6px}
+.alphas input{padding:6px 7px;font-size:13px}
+.qline{font:11.5px var(--f-mono);color:var(--muted);margin:0;line-height:1.6}
+.qline .w{color:var(--critical)}
+.readout{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:1px;background:var(--line)}
+.readout>div{background:var(--surface);padding:14px 16px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.readout .k{font-size:12px;color:var(--muted)}
+.readout .v{font:500 24px var(--f-mono);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.readout .v.top{color:var(--accent)}
+.readout .v.crit{color:var(--critical)}
+.readout .s{font-size:12px;color:var(--muted)}
+#ft{display:block;width:100%;height:auto;max-height:78vh;margin:0 auto}
+.ft-wrap{padding:8px}
+.ft-box{fill:var(--surface);stroke:var(--line-strong);stroke-width:1}
+.ft-box.top{stroke:var(--accent);stroke-width:2;fill:var(--accent-soft)}
+.ft-box.spf{stroke:var(--critical);stroke-width:1.6;fill:var(--critical-soft)}
+.ft-txt{font:11px var(--f-body);fill:var(--ink)}
+.ft-txt.b{font-weight:600}
+.ft-gate{fill:var(--surface);stroke:var(--ink);stroke-width:1.3}
+.ft-gname{font:600 8.5px var(--f-mono);fill:var(--ink)}
+.ft-basic{fill:var(--surface);stroke:var(--ink);stroke-width:1.3}
+.ft-basic.ccf{stroke:var(--flow);stroke-dasharray:3 2}
+.ft-basic.spf{stroke:var(--critical);fill:var(--critical-soft)}
+.ft-zero{opacity:.45}
+.ft-p{font:10px var(--f-mono);fill:var(--muted)}
+.ft-wire{fill:none;stroke:var(--line-strong);stroke-width:1.1}
+.ft-xfer{fill:var(--surface);stroke:var(--flow);stroke-width:1.3}
+.ft-xtxt{font:10px var(--f-mono);fill:var(--flow)}
+.ft-gp{font:10px var(--f-mono);fill:var(--accent)}
+.ft-tid{font:600 10px var(--f-mono);fill:var(--flow)}
+.ft-basic.rep{stroke-width:2.4}
+.ft-rep{font:600 9.5px var(--f-mono);fill:var(--flow)}
+.blk .reptag{font:600 9.5px var(--f-mono);fill:var(--flow)}
+.cols{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:18px;align-items:start}
+@media (max-width:880px){.cols{grid-template-columns:minmax(0,1fr)}}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+th{font:600 11px var(--f-body);text-transform:uppercase;letter-spacing:.07em;color:var(--muted);text-align:left;padding:8px 12px;border-bottom:1px solid var(--line)}
+td{padding:8px 12px;border-bottom:1px solid var(--line);vertical-align:middle}
+tr:last-child td{border-bottom:0}
+td.num{font-family:var(--f-mono);font-size:12.5px;white-space:nowrap}
+.chip{display:inline-block;font:12px var(--f-mono);padding:2px 7px;border-radius:3px;background:var(--sunk);border:1px solid var(--line);margin:2px 3px 2px 0;white-space:nowrap}
+tr.spf .chip{background:var(--critical-soft);border-color:var(--critical);color:var(--critical)}
+tr.ccf .chip{border-style:dashed}
+.ord{font:600 11px var(--f-mono);color:var(--muted)}
+tr.spf .ord{color:var(--critical)}
+.bar{height:6px;background:var(--sunk);border-radius:3px;overflow:hidden;min-width:60px}
+.bar>i{display:block;height:100%;background:var(--accent)}
+tr.spf .bar>i{background:var(--critical)}
+.imp{display:flex;flex-direction:column;gap:10px;padding:12px 14px}
+.imp-row{display:grid;grid-template-columns:110px minmax(0,1fr) 52px;gap:10px;align-items:center;font-size:13px}
+.imp-row .n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.imp-row .num{font:12px var(--f-mono);text-align:right}
+.sheet{position:fixed;inset:0;background:var(--scrim);display:flex;align-items:center;justify-content:center;z-index:10;
+  padding:calc(16px + env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) calc(16px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+.sheet-card{background:var(--surface);border:1px solid var(--line);border-radius:6px;width:min(760px,100%);max-height:100%;display:flex;flex-direction:column;min-width:0}
+.sheet-card p{padding:10px 14px 0}
+#sheetText{flex:1;min-height:260px;margin:10px 14px 14px;font:12px/1.5 var(--f-mono);color:var(--ink);background:var(--bg);border:1px solid var(--line-strong);border-radius:4px;padding:10px;resize:vertical;width:auto}
+@media (prefers-reduced-motion:no-preference){.bar>i{transition:width .25s ease}}
+.ft-box.frm{stroke:var(--flow);stroke-width:1.5}
+.ed{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:18px;align-items:start}
+@media (max-width:880px){.ed{grid-template-columns:minmax(0,1fr)}}
+#ft .nd{cursor:pointer}
+#ft .nd:hover .ft-box{stroke:var(--flow)}
+#ft .nd.sel .ft-box{stroke:var(--flow);stroke-width:2.6}
+.ft-box.empty{stroke:var(--critical);stroke-dasharray:4 3}
+.args{display:flex;flex-direction:column;gap:4px}
+.arg{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:8px;align-items:center;font-size:13px;padding:4px 6px;border:1px solid var(--line);border-radius:4px;background:var(--bg)}
+.arg .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}
+.arg .nm small{font:11px var(--f-mono);color:var(--muted);margin-left:4px}
+.arg .bt{display:flex;gap:3px}
+button.mini{padding:4px 7px;font-size:12px}
+.empty-state{padding:36px 20px;text-align:center;display:flex;flex-direction:column;gap:12px;align-items:center}
+.empty-state p{max-width:56ch;margin:0;color:var(--muted)}
+body.dragging .ft-wrap{outline:2px dashed var(--accent);outline-offset:-6px}
+td input{padding:5px 7px;font-size:13px}
+td.lab{min-width:180px}
+.warn{color:var(--critical);font-size:12.5px;margin:0}
+.idn{font:11px var(--f-mono);color:var(--muted);word-break:break-all}
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Fault Tree Editor</h1>
+      <p class="sub">Open an Open-PSA XML fault tree, such as one exported from the Fault Tree Workbench, and edit it directly: change probabilities, add or remove events and gates, regroup branches under new labelled events and change gate types. The top-event probability, gate probabilities and cut sets update as you edit.</p>
+    </div>
+    <span class="tag">Open-PSA MEF</span>
+  </header>
+
+  <section class="panel">
+    <div class="filebar">
+      <div class="fgroup"><span class="flabel">File</span><button id="fOpen" type="button">Open XML…</button><button id="fNew" type="button">New tree</button></div>
+      <div class="fgroup"><span class="flabel">Edit</span><button id="fUndo" type="button" title="Undo (Ctrl+Z)">Undo</button><button id="fRedo" type="button" title="Redo (Ctrl+Shift+Z)">Redo</button></div>
+      <div class="fgroup"><span class="flabel">Export</span><button id="fXml" type="button">Open-PSA XML</button><button id="fPptx" type="button">PowerPoint</button><button id="fSvg" type="button">SVG</button></div>
+      <span id="status" class="note" role="status"></span>
+    </div>
+    <input type="file" id="fileIn" accept=".xml,.txt,.opsa,application/xml,text/xml,text/plain" hidden>
+  </section>
+
+  <section class="panel"><div class="readout" id="readout"></div></section>
+
+  <div class="ed">
+    <section class="panel">
+      <div class="panel-h"><h2 id="treeTitle">Fault tree</h2><span class="note">Tap a box to edit it · △ Tn = same gate as the box tagged Tn, drawn in full elsewhere · red = single-point failure · R×n = repeated event, counted once</span></div>
+      <div class="ft-wrap"><svg id="ft" aria-label="Fault tree"></svg></div>
+    </section>
+    <aside class="panel insp"><div class="sect" id="insp"></div>
+      <div class="sect"><h2>How it calculates</h2>
+        <p class="note">Probabilities are per mission, as stored in the file. Each basic event is counted once however many gates it appears under: the top event and every gate are computed exactly from a binary decision diagram.</p>
+        <p class="note">Grouping inputs under a new gate of the same type (OR inside OR, AND inside AND) adds a label without changing the result. Changing a gate's type or moving events between gates does change the logic.</p></div>
+    </aside>
+  </div>
+
+  <div class="cols">
+    <section class="panel">
+      <div class="panel-h"><h2>Basic events</h2><span class="note" id="evCount"></span></div>
+      <div class="scroll"><table><thead><tr><th>Event</th><th>P (per mission)</th><th>Importance</th><th>Used</th></tr></thead><tbody id="evBody"></tbody></table></div>
+    </section>
+    <section class="panel">
+      <div class="panel-h"><h2>Minimal cut sets</h2><span class="note" id="csCount"></span></div>
+      <div class="scroll"><table><thead><tr><th>Order</th><th>Events</th><th>P</th></tr></thead><tbody id="csBody"></tbody></table></div>
+    </section>
+  </div>
+</div>
+
+<div class="sheet" id="sheet" hidden>
+  <div class="sheet-card" role="dialog" aria-labelledby="sheetTitle">
+    <div class="panel-h"><h2 id="sheetTitle">Export</h2><div class="toolbar"><button id="sheetCopy" type="button">Copy</button><button id="sheetClose" type="button">Close</button></div></div>
+    <p class="note" id="sheetNote"></p>
+    <textarea id="sheetText" readonly spellcheck="false"></textarea>
+  </div>
+</div>
+
+<script>
+const KEY='ft-editor-v1';
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fmt=p=>p>0?p.toExponential(2).replace('e-','e−'):'0';
+function status(msg,err){const el=$('status');el.textContent=msg;el.classList.toggle('err',!!err)}
+
+/* ---------- model ----------
+   E = {top, gates:{name:{label,op:'or'|'and'|'atleast',k,args:[{t:'g'|'e',n}],kind}}, events:{name:{label,p,ccf}}}  */
+let E=null,sel=null,undo=[],redo=[],editKey=null;
+try{const raw=JSON.parse(localStorage.getItem(KEY));if(raw&&raw.gates&&raw.events&&raw.gates[raw.top])E=raw}catch(e){}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(E))}catch(e){}}
+// call before a change; text fields pass a key so a run of typing is one undo step
+function snap(key){if(key&&key===editKey)return;editKey=key||null;if(!E)return;undo.push(JSON.stringify(E));if(undo.length>200)undo.shift();redo=[]}
+function uniq(base){const x=String(base).replace(/[^A-Za-z0-9_]/g,'_').replace(/_+/g,'_').replace(/^_|_$/g,'')||'X';let n=/^[0-9]/.test(x)?'_'+x:x,y=n,i=2;
+  while(E.gates[y]||E.events[y])y=n+'_'+i++;return y}
+function blank(){return{top:'G_TOP',gates:{G_TOP:{label:'Top event',op:'or',args:[{t:'e',n:'E_1'}],kind:'top'}},events:{E_1:{label:'Basic event 1',p:1e-4}}}}
+
+/* ---------- Open-PSA parsing ---------- */
+const kids=el=>[...el.children];
+function parseOpsa(text){
+  const doc=new DOMParser().parseFromString(text,'application/xml');
+  if(doc.getElementsByTagName('parsererror').length)throw new Error("This file isn't valid XML.");
+  const root=doc.documentElement;if(root.localName!=='opsa-mef')throw new Error("There's no <opsa-mef> element, so this isn't an Open-PSA file.");
+  const gates={},events={},warn=[],params={};
+  const lbl=el=>{const l=kids(el).find(c=>c.localName==='label');return l?l.textContent.trim().replace(/\s+/g,' '):''};
+  const attr=(el,n)=>{const a=kids(el).find(c=>c.localName==='attributes');if(!a)return null;const x=kids(a).find(c=>c.getAttribute('name')===n);return x?x.getAttribute('value'):null};
+  for(const d of root.getElementsByTagName('define-parameter')){const f=kids(d).find(c=>c.localName==='float');if(f)params[d.getAttribute('name')]=+f.getAttribute('value')}
+  const num=(el,who)=>{if(!el)return null;const t=el.localName;
+    if(t==='float'||t==='int')return+el.getAttribute('value');
+    if(t==='parameter'){const v=params[el.getAttribute('name')];return v==null?null:v}
+    if(t==='exponential'){const a=kids(el).map(c=>c.localName==='system-mission-time'?null:num(c,who));if(a[0]!=null&&a[1]!=null)return 1-Math.exp(-a[0]*a[1])}
+    return null};
+  for(const d of root.getElementsByTagName('define-basic-event')){const n=d.getAttribute('name');
+    const ex=kids(d).find(c=>!['label','attributes'].includes(c.localName));let p=num(ex,n);
+    if(p==null||!isFinite(p)){if(ex)warn.push(`${n}: unsupported probability expression <${ex.localName}>, set to 0`);p=0}
+    events[n]={label:lbl(d)||n,p:Math.min(1,Math.max(0,p)),ccf:attr(d,'ftw-ccf')==='true'}}
+  const anonName=(ctx,op)=>{let b=ctx+'_'+op,y=b,i=2;while(gates[y]||events[y])y=b+'_'+i++;return y};
+  const gateDefs=[...root.getElementsByTagName('define-gate')];
+  const defined=new Set(gateDefs.map(d=>d.getAttribute('name')));
+  function formula(el,ctx){const t=el.localName,n=el.getAttribute('name');
+    if(t==='constant')return null;
+    if(t==='gate')return{t:'g',n};
+    if(t==='basic-event')return{t:'e',n};
+    if(t==='event')return{t:defined.has(n)?'g':'e',n};
+    if(t==='house-event'){warn.push(`${n}: house event treated as a basic event with P = 0`);if(!events[n])events[n]={label:n,p:0};return{t:'e',n}}
+    if(t==='or'||t==='and'||t==='atleast'){const name=anonName(ctx,t);
+      gates[name]={label:`${t==='atleast'?'At least '+el.getAttribute('min')+' of':t.toUpperCase()} (unnamed in file)`,op:t,k:t==='atleast'?+el.getAttribute('min'):null,args:[],kind:''};
+      gates[name].args=kids(el).map(c=>formula(c,name)).filter(Boolean);return{t:'g',n:name}}
+    throw new Error(`Gate ${ctx} uses <${t}>, which this editor doesn't support. It handles OR, AND and at-least (k-of-n) gates.`)}
+  for(const d of gateDefs){const n=d.getAttribute('name'),f=kids(d).find(c=>!['label','attributes'].includes(c.localName));
+    const g={label:lbl(d)||n,op:'or',k:null,args:[],kind:attr(d,'ftw-kind')||''};gates[n]=g;if(!f)continue;
+    if(f.localName==='constant'){if(f.getAttribute('value')==='true')warn.push(`${n}: constant TRUE gate treated as empty`);continue}
+    if(f.localName==='or'||f.localName==='and'||f.localName==='atleast'){g.op=f.localName;g.k=f.localName==='atleast'?+f.getAttribute('min'):null;g.args=kids(f).map(c=>formula(c,n)).filter(Boolean)}
+    else g.args=[formula(f,n)].filter(Boolean)}
+  // references to undefined events become events with P = 0
+  for(const[gn,g]of Object.entries(gates)){g.args=g.args.filter(a=>{
+    if(a.t==='g'&&!gates[a.n]){warn.push(`${gn} refers to undefined gate ${a.n}; removed`);return false}
+    if(a.t==='e'&&!events[a.n]){warn.push(`${a.n} has no definition; added with P = 0`);events[a.n]={label:a.n,p:0}}return true});
+    if(g.op==='atleast'&&!(g.k>=1&&g.k<=g.args.length)){warn.push(`${gn}: at-least threshold ${g.k} is out of range; set to ${Math.min(Math.max(1,g.k|0),g.args.length)||1}`);g.k=Math.min(Math.max(1,g.k|0),g.args.length)||1}}
+  if(!Object.keys(gates).length)throw new Error('The file has no gates.');
+  // top gate: named in the workbench comment, otherwise the gate nothing else refers to
+  const m=text.match(/Top gate:\s*([A-Za-z_][\w.-]*)/),refd=new Set(Object.values(gates).flatMap(g=>g.args.filter(a=>a.t==='g').map(a=>a.n)));
+  let top=m&&gates[m[1]]?m[1]:null;const roots=Object.keys(gates).filter(n=>!refd.has(n));
+  if(!top)top=roots[0];if(!top)throw new Error('Every gate is used by another gate, so there is no top event (the tree has a loop).');
+  if(roots.length>1)warn.push(`${roots.length} gates aren't used by any other gate; ${top} was taken as the top event`);
+  const M={top,gates,events};if(hasCycle(M,top))throw new Error('The gates form a loop, which a fault tree cannot represent.');
+  gc(M);return{M,warn}}
+function hasCycle(M,top){const st=new Set(),done=new Set();
+  const go=n=>{if(done.has(n))return false;if(st.has(n))return true;st.add(n);const g=M.gates[n];
+    for(const a of g.args)if(a.t==='g'&&go(a.n))return true;st.delete(n);done.add(n);return false};return go(top)}
+function reach(M){const g=new Set(),e=new Set();(function go(n){if(g.has(n))return;g.add(n);for(const a of M.gates[n].args)a.t==='g'?go(a.n):e.add(a.n)})(M.top);return{g,e}}
+function gc(M){const r=reach(M);for(const n of Object.keys(M.gates))if(!r.g.has(n))delete M.gates[n];for(const n of Object.keys(M.events))if(!r.e.has(n))delete M.events[n]}
+function uses(){const u=new Map();for(const g of Object.values(E.gates))for(const a of g.args)u.set(a.t+':'+a.n,(u.get(a.t+':'+a.n)||0)+1);return u}
+// may gate `child` go under gate `parent` without creating a loop?
+function canAdd(parent,child){if(parent===child)return false;const seen=new Set();
+  return!(function go(n){if(n===parent)return true;if(seen.has(n))return false;seen.add(n);return E.gates[n].args.some(a=>a.t==='g'&&go(a.n))})(child)}
+
+/* ---------- Open-PSA writing ---------- */
+function toXml(){
+  const r=reach(E),x=esc,order=[];(function go(n,s){if(s.has(n))return;s.add(n);order.push(n);E.gates[n].args.forEach(a=>a.t==='g'&&go(a.n,s))})(E.top,new Set());
+  const ref=a=>a.t==='g'?`<gate name="${a.n}"/>`:`<basic-event name="${a.n}"/>`;
+  const gates=order.map(n=>{const g=E.gates[n],args=g.args.map(ref);
+    const f=!args.length?'<constant value="false"/>':args.length===1?args[0]:`<${g.op}${g.op==='atleast'?` min="${g.k}"`:''}>${args.join('')}</${g.op}>`;
+    return`    <define-gate name="${n}">\n      <label>${x(g.label)}</label>\n`+(g.kind?`      <attributes><attribute name="ftw-kind" value="${x(g.kind)}"/></attributes>\n`:'')+`      ${f}\n    </define-gate>`});
+  const evs=[...r.e].map(n=>{const e=E.events[n];return`    <define-basic-event name="${n}">\n      <label>${x(e.label)}</label>\n`+
+    (e.ccf?`      <attributes><attribute name="ftw-ccf" value="true"/></attributes>\n`:'')+`      <float value="${e.p}"/>\n    </define-basic-event>`});
+  return`<?xml version="1.0" encoding="UTF-8"?>
+<!-- Edited in Fault Tree Editor. Top gate: ${E.top}. Probabilities are per mission. -->
+<opsa-mef>
+  <define-fault-tree name="FTW">
+    <label>${x(E.gates[E.top].label)}</label>
+${gates.join('\n')}
+  </define-fault-tree>
+  <model-data>
+${evs.join('\n')}
+  </model-data>
+</opsa-mef>
+`}
+
+/* ---------- analysis: BDD for exact probabilities, cut sets for the table ---------- */
+function makeBDD(limit){
+  const V=[1e9,1e9],LO=[0,1],HI=[0,1],U=new Map(),C=new Map(),order=new Map(),vars=[];
+  function mk(v,lo,hi){if(lo===hi)return lo;const k=v+','+lo+','+hi;let r=U.get(k);
+    if(r===undefined){r=V.length;if(r>limit)throw new Error('BDD too large');V.push(v);LO.push(lo);HI.push(hi);U.set(k,r)}return r}
+  function ap(and,a,b){
+    if(and){if(!a||!b)return 0;if(a===1)return b;if(b===1)return a}else{if(a===1||b===1)return 1;if(!a)return b;if(!b)return a}
+    if(a===b)return a;if(a>b){const t=a;a=b;b=t}
+    const k=(and?'&':'|')+a+','+b;let r=C.get(k);if(r!==undefined)return r;
+    const v=Math.min(V[a],V[b]),ta=V[a]===v,tb=V[b]===v;
+    r=mk(v,ap(and,ta?LO[a]:a,tb?LO[b]:b),ap(and,ta?HI[a]:a,tb?HI[b]:b));C.set(k,r);return r}
+  const and=(a,b)=>ap(true,a,b),or=(a,b)=>ap(false,a,b);
+  function leaf(e){if(!order.has(e)){order.set(e,vars.length);vars.push(e)}return mk(order.get(e),0,1)}
+  function atleast(k,xs){const memo=new Map();
+    const f=(i,k)=>{if(k<=0)return 1;if(xs.length-i<k)return 0;const key=i+':'+k;let r=memo.get(key);
+      if(r===undefined){r=or(and(xs[i],f(i+1,k-1)),f(i+1,k));memo.set(key,r)}return r};
+    return f(0,k)}
+  function prob(root,q){const memo=new Map([[0,0],[1,1]]);
+    const P=n=>{let r=memo.get(n);if(r!==undefined)return r;const p=q(vars[V[n]]);r=p*P(HI[n])+(1-p)*P(LO[n]);memo.set(n,r);return r};
+    return P(root)}
+  return{and,or,leaf,atleast,prob};
+}
+function minimize(sets){
+  const seen=new Set(),u=[];for(const s of sets){const k=s.join('|');if(!seen.has(k)){seen.add(k);u.push(s)}}
+  u.sort((a,b)=>a.length-b.length);const keep=[];
+  for(const s of u){const ss=new Set(s);if(!keep.some(k=>k.every(x=>ss.has(x))))keep.push(s)}return keep}
+function andProd(lists){let prod=[[]];
+  for(const c of lists){if(!c.length)return[];const np=[];
+    outer:for(const a of prod)for(const b of c){np.push([...new Set(a.concat(b))].sort());if(np.length>6000)break outer}
+    prod=minimize(np)}
+  return prod}
+function kSubsets(n,k){const r=[];(function go(s,a){if(a.length===k){r.push(a.slice());return}for(let i=s;i<n;i++){a.push(i);go(i+1,a);a.pop()}})(0,[]);return r}
+const kOf=g=>g.op==='and'?g.args.length:g.op==='or'?1:Math.min(Math.max(1,g.k|0),g.args.length);
+function analyze(){
+  const ev=E.events,q=n=>ev[n].p;
+  // cut sets
+  const cm=new Map();
+  const CS=a=>{if(a.t==='e')return ev[a.n].p>0?[[a.n]]:[];if(cm.has(a.n))return cm.get(a.n);const g=E.gates[a.n],L=g.args.map(CS);let r=[];
+    if(!L.length)r=[];else if(g.op==='or')r=minimize(L.flat());else{for(const sub of kSubsets(L.length,kOf(g)))r=r.concat(andProd(sub.map(i=>L[i])));r=minimize(r)}
+    cm.set(a.n,r);return r};
+  const cuts=CS({t:'g',n:E.top}),rows=cuts.map(c=>({c,p:c.reduce((p,n)=>p*q(n),1)})).sort((a,b)=>b.p-a.p),sum=rows.reduce((s,r)=>s+r.p,0);
+  // exact probabilities
+  let B=null,gp=new Map(),P=Math.min(1,sum),exact=false,imp=new Map();
+  try{B=makeBDD(300000);const fm=new Map();
+    const F=a=>{if(a.t==='e')return ev[a.n].p>0?B.leaf(a.n):0;if(fm.has(a.n))return fm.get(a.n);const g=E.gates[a.n],xs=g.args.map(F);
+      const r=!xs.length?0:g.op==='or'?xs.reduce((s,x)=>B.or(s,x),0):g.op==='and'?xs.reduce((s,x)=>B.and(s,x),1):B.atleast(kOf(g),xs);fm.set(a.n,r);return r};
+    const root=F({t:'g',n:E.top});for(const[n,f]of fm)gp.set(n,B.prob(f,q));P=gp.get(E.top);exact=true;
+    for(const n of Object.keys(ev))imp.set(n,P>0?Math.max(0,(P-B.prob(root,x=>x===n?0:q(x)))/P):0)}
+  catch(e){gp=new Map();for(const n of Object.keys(ev))imp.set(n,sum?rows.filter(r=>r.c.includes(n)).reduce((s,r)=>s+r.p,0)/sum:0)}
+  const spf=new Set(cuts.filter(c=>c.length===1).flat());
+  return{rows,sum,P,exact,gp,imp,spf}}
+
+/* ---------- tree drawing (same layout as the workbench) ---------- */
+const FT={NW:136,LH:112,PAD:16,BH:38};
+function wrap(t,n){const w=String(t).split(/\s+/),L=[];let c='';for(const x of w){if((c+' '+x).trim().length>n&&c){L.push(c);c=x}else c=(c+' '+x).trim()}if(c)L.push(c);
+  if(L.length>2){L.length=2;L[1]=L[1].slice(0,n-1)+'…'}return L}
+// Transfers: the full branch and each △ pointing to it share a label T1, T2… numbered in drawing order
+function tagTransfers(root,key){const want=new Set(),ids=new Map();
+  (function w(n){if(n.k==='xfer')want.add(key(n));else(n.ch||[]).forEach(w)})(root);
+  (function w(n){if(n.k==='gate'){const k=key(n);if(k!=null&&want.has(k)&&!ids.has(k)){ids.set(k,'T'+(ids.size+1));n.tid=ids.get(k)}n.ch.forEach(w)}})(root);
+  (function w(n){if(n.k==='xfer')n.tid=ids.get(key(n));else(n.ch||[]).forEach(w)})(root)}
+const ftX=n=>FT.PAD+n.x*FT.NW+FT.NW/2,ftY=n=>FT.PAD+n.d*FT.LH;
+let drawn=[],lastTree=null;
+function buildTree(A){
+  const seen=new Set(),cnt=new Map(),nodes=[];
+  function node(a,parent,idx){let n;
+    if(a.t==='e'){const e=E.events[a.n];n={k:'basic',name:a.n,label:e.label,p:e.p,ccf:e.ccf};cnt.set(a.n,(cnt.get(a.n)||0)+1)}
+    else{const g=E.gates[a.n],k=kOf(g);
+      if(seen.has(a.n))n={k:'xfer',name:a.n,label:g.label,p:A.gp.get(a.n)};
+      else{seen.add(a.n);n={k:'gate',name:a.n,label:g.label,g:g.op==='or'||(g.op==='atleast'&&k===1)?'OR':g.op==='and'||k===g.args.length?'AND':'VOTE',vk:k,vn:g.args.length,
+        p:A.gp.get(a.n),top:a.n===E.top,frame:g.kind==='frame',ch:[]};n.ch=g.args.map((c,i)=>node(c,a.n,i))}}
+    n.parent=parent;n.idx=idx;n.i=nodes.push(n)-1;return n}
+  const root=node({t:'g',n:E.top},null,-1);
+  for(const n of nodes)if(n.k==='basic'&&cnt.get(n.name)>1)n.rep=cnt.get(n.name);
+  return{root,nodes,repeated:[...cnt].filter(([,c])=>c>1).map(([n])=>n)}}
+function layTree(root){let leaf=0,maxD=0;
+  (function lay(n,d){n.d=d;maxD=Math.max(maxD,d);if(n.k==='gate'&&n.ch.length){n.ch.forEach(c=>lay(c,d+1));n.x=(n.ch[0].x+n.ch.at(-1).x)/2}else n.x=leaf++})(root,0);
+  return{Wd:leaf*FT.NW+FT.PAD*2,Hd:(maxD+1)*FT.LH+FT.PAD}}
+const isSel=n=>sel&&sel.name===n.name&&sel.parent===n.parent&&sel.idx===n.idx;
+function drawTree(A){
+  const T=buildTree(A),root=T.root,ft=$('ft');drawn=T.nodes;
+  tagTransfers(root,n=>n.name);
+  const{Wd,Hd}=layTree(root);let o='';
+  (function dr(n){const x=ftX(n),y=ftY(n),bw=FT.NW-14,s=n.k==='basic'&&A.spf.has(n.name),z=n.k==='basic'&&!(n.p>0),em=n.k==='gate'&&!n.ch.length;
+    const lines=wrap(n.label,20);
+    o+=`<g class="nd${isSel(n)?' sel':''}${z?' ft-zero':''}" data-i="${n.i}"><title>${esc(n.label)} · ${esc(n.name)}${n.p!=null?' · P = '+fmt(n.p):''}${n.rep?` · repeated ${n.rep}×, counted once`:''}${em?' · empty gate: add inputs':''}</title>`+
+      `<rect class="ft-box${n.top?' top':''}${s?' spf':''}${n.frame&&!n.top?' frm':''}${em?' empty':''}" x="${x-bw/2}" y="${y}" width="${bw}" height="${FT.BH}" rx="3"/>`;
+    lines.forEach((t,i)=>o+=`<text class="ft-txt${n.top?' b':''}" x="${x}" y="${y+(lines.length===1?23:16+i*13)}" text-anchor="middle">${esc(t)}</text>`);
+    if(n.tid&&n.k==='gate')o+=`<text class="ft-tid" x="${x+bw/2}" y="${y-4}" text-anchor="end">${n.tid}<title>Transfer ${n.tid}: drawn in full here, and as △ ${n.tid} elsewhere</title></text>`;
+    const y0=y+42;o+=`<line class="ft-wire" x1="${x}" y1="${y+FT.BH}" x2="${x}" y2="${y0}"/>`;
+    if(n.k==='gate'){
+      o+=n.g!=='AND'?`<path class="ft-gate" d="M${x-15},${y0+24} Q${x-15},${y0+7} ${x},${y0} Q${x+15},${y0+7} ${x+15},${y0+24} Q${x},${y0+16} ${x-15},${y0+24}Z"/>`
+        :`<path class="ft-gate" d="M${x-14},${y0+24} L${x-14},${y0+11} A14 11 0 0 1 ${x+14},${y0+11} L${x+14},${y0+24}Z"/>`;
+      o+=`<text class="ft-gname" x="${x}" y="${y0+19}" text-anchor="middle">${n.g==='VOTE'?n.vk+'/'+n.vn:n.g}</text>`;
+      if(n.p!=null)o+=`<text class="ft-gp" x="${x+19}" y="${y0+14}">${fmt(n.p)}</text>`;
+      o+='</g>';
+      const yb=n.g!=='AND'?y0+20:y0+24,ym=y+FT.LH-14;
+      for(const c of n.ch){const xc=ftX(c);o+=`<path class="ft-wire" d="M${x},${yb} V${ym} H${xc} V${ftY(c)}"/>`;dr(c)}
+    }else if(n.k==='basic'){
+      o+=`<circle class="ft-basic${n.ccf?' ccf':''}${s?' spf':''}${n.rep?' rep':''}" cx="${x}" cy="${y0+12}" r="12"/><text class="ft-p" x="${x}" y="${y0+40}" text-anchor="middle">${fmt(n.p)}</text>`+
+        (n.rep?`<text class="ft-rep" x="${x+16}" y="${y0+6}">R×${n.rep}</text>`:'')+`</g>`;
+    }else{
+      o+=`<path class="ft-xfer" d="M${x},${y0} L${x+14},${y0+24} L${x-14},${y0+24}Z"/><text class="ft-xtxt" x="${x}" y="${y0+40}" text-anchor="middle">${n.tid||''}<title>Transfer ${n.tid||''}: same branch as the box tagged ${n.tid||''}, drawn in full elsewhere</title></text></g>`;
+    }})(root);
+  // fit the panel: never above natural size, height capped to the viewport
+  ft.setAttribute('viewBox',`0 0 ${Wd} ${Hd}`);ft.style.maxWidth=Wd+'px';ft.style.aspectRatio=`${Wd} / ${Hd}`;ft.dataset.w=Wd;ft.dataset.h=Hd;ft.innerHTML=o;
+  lastTree={root,Wd,Hd,spf:A.spf};return T}
+$('ft').addEventListener('click',e=>{const g=e.target.closest('[data-i]');if(!g)return;const n=drawn[+g.dataset.i];
+  sel={name:n.name,parent:n.parent,idx:n.idx,t:n.k==='basic'?'e':'g'};render()});
+
+/* ---------- editing actions ---------- */
+function act(fn,msg){snap();fn();gc(E);render();if(msg)status(msg)}
+const gateOf=n=>E.gates[n];
+function newEvent(parent){const n=uniq('E_new');E.events[n]={label:'New basic event',p:1e-4};gateOf(parent).args.push({t:'e',n});sel={name:n,parent,idx:gateOf(parent).args.length-1,t:'e'}}
+function newGate(parent){const n=uniq('G_new');E.gates[n]={label:'New gate',op:'or',k:null,args:[],kind:''};gateOf(parent).args.push({t:'g',n});sel={name:n,parent,idx:gateOf(parent).args.length-1,t:'g'}}
+function locate(){const a=gateOf(sel.parent)?.args||[];return a[sel.idx]&&a[sel.idx].n===sel.name?sel.idx:a.findIndex(x=>x.n===sel.name)}
+function insertAbove(){const p=gateOf(sel.parent);sel.idx=locate();if(sel.idx<0)return;const a=p.args[sel.idx],n=uniq('G_group');
+  E.gates[n]={label:'New intermediate event',op:'or',k:null,args:[a],kind:''};p.args[sel.idx]={t:'g',n};sel={name:n,parent:sel.parent,idx:sel.idx,t:'g'}}
+function groupChecked(idxs){const g=gateOf(sel.name),n=uniq('G_group'),op=g.op==='atleast'?'or':g.op;
+  E.gates[n]={label:'New intermediate event',op,k:null,args:idxs.map(i=>g.args[i]),kind:''};
+  const first=Math.min(...idxs);g.args=g.args.filter((_,i)=>!idxs.includes(i));g.args.splice(first,0,{t:'g',n});
+  if(g.op==='atleast')g.k=Math.min(g.k,g.args.length);sel={name:n,parent:sel.name,idx:first,t:'g'}}
+function removeRef(parent,idx){const g=gateOf(parent);g.args.splice(idx,1);if(g.op==='atleast')g.k=Math.min(Math.max(1,g.k),Math.max(1,g.args.length))}
+
+/* ---------- inspector ---------- */
+function renderInsp(A,U){
+  const el=$('insp');
+  if(sel&&!(sel.t==='g'?E.gates[sel.name]:E.events[sel.name]))sel=null;
+  if(!sel){el.innerHTML=`<h2>Selection</h2><p class="empty">Tap a gate or event in the tree to edit it. Select the top box to rename the top event or add inputs to it.</p>`;return}
+  const parentNote=sel.parent?`<div class="row"><button id="iAbove" type="button">Insert gate above</button><button id="iRemove" type="button" class="danger">Remove from parent</button></div>`:'';
+  if(sel.t==='e'){const e=E.events[sel.name],u=U.get('e:'+sel.name)||0;
+    el.innerHTML=`<h2>Basic event</h2><p class="idn">${esc(sel.name)}</p>
+      <label class="f">Description<input id="iLab" type="text" value="${esc(e.label)}"></label>
+      <label class="f">Probability per mission (0 to 1)<input id="iP" class="mono" type="text" inputmode="decimal" value="${e.p}"></label>
+      <p class="derived">${u>1?`Used under ${u} gates: one event, counted once.`:'Used under 1 gate.'} Importance ${((A.imp.get(sel.name)||0)*100).toFixed(1)}%</p>${parentNote}`;
+    $('iLab').oninput=ev=>{snap('lab:'+sel.name);e.label=ev.target.value;render(true)};
+    $('iP').oninput=ev=>{const v=parseFloat(ev.target.value.replace('−','-'));const ok=v>=0&&v<=1&&isFinite(v);ev.target.classList.toggle('bad',!ok);
+      if(ok){snap('p:'+sel.name);e.p=v;render(true)}};
+  }else{const g=E.gates[sel.name],top=sel.name===E.top,n=g.args.length;
+    const cands=[...Object.keys(E.events).map(x=>({t:'e',n:x,l:E.events[x].label})),...Object.keys(E.gates).filter(x=>canAdd(sel.name,x)).map(x=>({t:'g',n:x,l:E.gates[x].label}))]
+      .filter(c=>!g.args.some(a=>a.t===c.t&&a.n===c.n));
+    el.innerHTML=`<h2>${top?'Top event':'Gate'}</h2><p class="idn">${esc(sel.name)}</p>
+      <label class="f">${top?'Undesired event':'Description'}<input id="iLab" type="text" value="${esc(g.label)}"></label>
+      <label class="f">Gate type<select id="iOp"><option value="or"${g.op==='or'?' selected':''}>OR: any input occurs</option><option value="and"${g.op==='and'?' selected':''}>AND: all inputs occur</option><option value="atleast"${g.op==='atleast'?' selected':''}>At least k of the inputs occur</option></select></label>
+      ${g.op==='atleast'?`<label class="f">k (1 to ${n})<input id="iK" class="mono" type="text" inputmode="numeric" value="${g.k}"></label>`:''}
+      <p class="derived">P = ${fmt(A.gp.get(sel.name)??0)}${n?'':' · empty gate: it never occurs until you add inputs'}</p>
+      <h2>Inputs (${n})</h2>
+      <div class="args">${g.args.map((a,i)=>{const l=a.t==='e'?E.events[a.n].label:E.gates[a.n].label;
+        return`<div class="arg"><input type="checkbox" data-ck="${i}" aria-label="Select ${esc(l)} for grouping"><span class="nm" data-go="${i}" title="${esc(a.n)}">${a.t==='e'?'○':'⬠'} ${esc(l)}<small>${a.t==='e'?fmt(E.events[a.n].p):'gate'}</small></span>
+          <span class="bt"><button class="mini" type="button" data-up="${i}" aria-label="Move up"${i?'':' disabled'}>↑</button><button class="mini" type="button" data-dn="${i}" aria-label="Move down"${i<n-1?'':' disabled'}>↓</button><button class="mini danger" type="button" data-rm="${i}" aria-label="Remove">✕</button></span></div>`}).join('')||'<p class="empty">No inputs yet.</p>'}</div>
+      <div class="row"><button id="iGroup" type="button" disabled>Group checked under new gate</button></div>
+      <div class="row"><button id="iNewE" type="button">+ Basic event</button><button id="iNewG" type="button">+ Gate</button></div>
+      ${cands.length?`<label class="f">Add an existing event or gate<select id="iExist"><option value="">Choose…</option>${cands.map(c=>`<option value="${c.t}:${esc(c.n)}">${c.t==='e'?'○':'⬠'} ${esc(c.l)}</option>`).join('')}</select></label>`:''}
+      ${parentNote}`;
+    $('iLab').oninput=ev=>{snap('lab:'+sel.name);g.label=ev.target.value;render(true)};
+    $('iOp').onchange=ev=>act(()=>{g.op=ev.target.value;g.k=g.op==='atleast'?Math.min(2,Math.max(1,n)):null});
+    if($('iK'))$('iK').oninput=ev=>{const v=+ev.target.value,ok=Number.isInteger(v)&&v>=1&&v<=n;ev.target.classList.toggle('bad',!ok);if(ok){snap('k:'+sel.name);g.k=v;render(true)}};
+    const checks=()=>[...el.querySelectorAll('[data-ck]')].filter(c=>c.checked).map(c=>+c.dataset.ck);
+    el.querySelectorAll('[data-ck]').forEach(c=>c.onchange=()=>{const k=checks().length;$('iGroup').disabled=k<1||(g.op==='atleast'&&k>1)});
+    $('iGroup').onclick=()=>{const k=checks();if(k.length)act(()=>groupChecked(k),'Grouped under a new gate. Rename it in the description field.')};
+    el.querySelectorAll('[data-go]').forEach(s=>s.onclick=()=>{const i=+s.dataset.go,a=g.args[i];sel={name:a.n,parent:sel.name,idx:i,t:a.t};render()});
+    el.querySelectorAll('[data-up]').forEach(b=>b.onclick=()=>act(()=>{const i=+b.dataset.up;[g.args[i-1],g.args[i]]=[g.args[i],g.args[i-1]]}));
+    el.querySelectorAll('[data-dn]').forEach(b=>b.onclick=()=>act(()=>{const i=+b.dataset.dn;[g.args[i+1],g.args[i]]=[g.args[i],g.args[i+1]]}));
+    el.querySelectorAll('[data-rm]').forEach(b=>b.onclick=()=>act(()=>removeRef(sel.name,+b.dataset.rm),'Input removed'));
+    $('iNewE').onclick=()=>act(()=>newEvent(sel.name),'Basic event added. Set its description and probability.');
+    $('iNewG').onclick=()=>act(()=>newGate(sel.name),'Gate added. Give it inputs.');
+    if($('iExist'))$('iExist').onchange=ev=>{const v=ev.target.value;if(!v)return;const i=v.indexOf(':');act(()=>{g.args.push({t:v.slice(0,i),n:v.slice(i+1)})},'Added. A shared event or gate is counted once.')};
+  }
+  if($('iAbove'))$('iAbove').onclick=()=>act(insertAbove,'New gate inserted above. Rename it in the description field.');
+  if($('iRemove'))$('iRemove').onclick=()=>{const p=sel.parent,i=locate();if(i<0)return;sel={name:p,parent:null,idx:-1,t:'g'};
+    // reselect the parent through its own parent link when it's drawn
+    const pn=drawn.find(d=>d.name===p&&d.k==='gate');if(pn)sel={name:p,parent:pn.parent,idx:pn.idx,t:'g'};act(()=>removeRef(p,i),'Removed from its parent gate')};
+}
+
+/* ---------- render ---------- */
+function render(keepInsp){
+  save();$('fUndo').disabled=!undo.length;$('fRedo').disabled=!redo.length;
+  if(!E){$('readout').innerHTML='';$('ft').removeAttribute('viewBox');$('ft').style.aspectRatio='';$('ft').innerHTML='';
+    $('ft').parentNode.querySelector('.empty-state')||$('ft').insertAdjacentHTML('afterend',`<div class="empty-state"><p>Open an Open-PSA XML file to edit it. In the Fault Tree Workbench, use <b>Fault tree → Open-PSA XML</b>; files from other Open-PSA tools with OR, AND and at-least gates work too. You can also drop a file here, or start a new tree.</p><div class="row"><button type="button" onclick="$('fOpen').click()">Open XML…</button><button type="button" onclick="$('fNew').click()">New tree</button></div></div>`);
+    $('insp').innerHTML='<h2>Selection</h2><p class="empty">No tree open.</p>';$('evBody').innerHTML='';$('csBody').innerHTML='';$('evCount').textContent='';$('csCount').textContent='';$('treeTitle').textContent='Fault tree';return}
+  document.querySelector('.empty-state')?.remove();
+  const A=analyze(),U=uses(),T=drawTree(A),ev=E.events,top=E.gates[E.top];
+  $('treeTitle').textContent='Fault tree · '+top.label;
+  const oneIn=A.P>0?Math.round(1/A.P).toLocaleString():'—';
+  $('readout').innerHTML=`<div><span class="k">P(${esc(top.label)})</span><span class="v top">${fmt(A.P)}</span><span class="s">per mission · ${A.exact?'exact · repeated events once':'rare-event approx.'}</span></div>
+    <div><span class="k">Occurs about once in</span><span class="v">${oneIn}</span><span class="s">missions (1 / P)</span></div>
+    <div><span class="k">Minimal cut sets</span><span class="v">${A.rows.length}</span><span class="s">smallest failure combinations</span></div>
+    <div><span class="k">Single-point failures</span><span class="v${A.spf.size?' crit':''}">${A.spf.size}</span><span class="s">${A.spf.size?[...A.spf].map(n=>esc(ev[n].label)).join(', '):'none'}</span></div>
+    <div><span class="k">Repeated events</span><span class="v">${T.repeated.length}</span><span class="s">${T.repeated.length?T.repeated.map(n=>esc(ev[n].label)).join(', ')+' · each counted once':'none'}</span></div>`;
+  const names=Object.keys(ev).sort((a,b)=>(A.imp.get(b)||0)-(A.imp.get(a)||0)||ev[a].label.localeCompare(ev[b].label));
+  $('evCount').textContent=`${names.length} events · sorted by importance`;
+  // keep focus in the table while typing: only rebuild it when the set of events changes
+  const evKeyNow=names.slice().sort().join('|');
+  if(!keepInsp||$('evBody').dataset.k!==evKeyNow){$('evBody').dataset.k=evKeyNow;
+    $('evBody').innerHTML=names.map(n=>`<tr data-ev="${esc(n)}"><td class="lab"><input type="text" data-f="label" value="${esc(ev[n].label)}" aria-label="Description of ${esc(n)}"><div class="idn">${esc(n)}</div></td>
+      <td><input class="mono" type="text" inputmode="decimal" data-f="p" value="${ev[n].p}" aria-label="Probability of ${esc(n)}"></td><td class="num" data-imp></td><td class="num">${U.get('e:'+n)||0}</td></tr>`).join('')}
+  for(const tr of $('evBody').children){const n=tr.dataset.ev;tr.querySelector('[data-imp]').textContent=((A.imp.get(n)||0)*100).toFixed(1)+'%';
+    for(const inp of tr.querySelectorAll('input'))if(document.activeElement!==inp)inp.value=inp.dataset.f==='p'?ev[n].p:ev[n].label}
+  $('csCount').textContent=`${A.rows.length} sets · sum ${fmt(A.sum)}`;
+  $('csBody').innerHTML=A.rows.slice(0,200).map(r=>{const one=r.c.length===1;
+    return`<tr class="${one?'spf':''}"><td><span class="ord">${one?'SPF':'×'+r.c.length}</span></td><td>${r.c.map(n=>`<span class="chip">${esc(ev[n].label)}</span>`).join('')}</td><td class="num">${fmt(r.p)}</td></tr>`}).join('')
+    +(A.rows.length>200?`<tr><td colspan="3" class="empty">Showing the 200 most likely of ${A.rows.length}.</td></tr>`:'')||`<tr><td colspan="3" class="empty">No cut sets: the top event cannot occur with the current data.</td></tr>`;
+  if(!keepInsp)renderInsp(A,U);else{const d=$('insp').querySelector('.derived');if(d&&sel){
+    if(sel.t==='g')d.textContent=`P = ${fmt(A.gp.get(sel.name)??0)}`+(E.gates[sel.name].args.length?'':' · empty gate: it never occurs until you add inputs');
+    else{const u=U.get('e:'+sel.name)||0;d.textContent=`${u>1?`Used under ${u} gates: one event, counted once.`:'Used under 1 gate.'} Importance ${((A.imp.get(sel.name)||0)*100).toFixed(1)}%`}}}
+}
+$('evBody').addEventListener('input',e=>{const t=e.target,n=t.closest('tr')?.dataset.ev;if(!n||!E.events[n])return;
+  if(t.dataset.f==='label'){snap('lab:'+n);E.events[n].label=t.value;render(true);return}
+  const v=parseFloat(t.value.replace('−','-')),ok=v>=0&&v<=1&&isFinite(v);t.classList.toggle('bad',!ok);if(ok){snap('p:'+n);E.events[n].p=v;render(true)}});
+$('evBody').addEventListener('focusout',()=>{editKey=null;if(sel)renderInsp(analyze(),uses())});
+$('insp').addEventListener('focusout',()=>{editKey=null});
+
+/* ---------- undo, files ---------- */
+function doUndo(){if(!undo.length)return;redo.push(JSON.stringify(E));E=JSON.parse(undo.pop());editKey=null;render();status('Undone')}
+function doRedo(){if(!redo.length)return;undo.push(JSON.stringify(E));E=JSON.parse(redo.pop());editKey=null;render();status('Redone')}
+$('fUndo').onclick=doUndo;$('fRedo').onclick=doRedo;
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'){$('sheet').hidden=true;return}
+  const t=e.target;if(t&&/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))return;
+  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){e.preventDefault();e.shiftKey?doRedo():doUndo()}
+  else if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='y'){e.preventDefault();doRedo()}});
+function load(text,name){
+  try{const{M,warn}=parseOpsa(text);if(E)snap();E=M;sel={name:M.top,parent:null,idx:-1,t:'g'};render();
+    const ng=Object.keys(M.gates).length,ne=Object.keys(M.events).length;
+    status(`Opened ${name}: ${ng} gates, ${ne} basic events`+(warn.length?` · ${warn.length} note${warn.length>1?'s':''}: ${warn.slice(0,3).join('; ')}${warn.length>3?'…':''}`:''),warn.length>0)}
+  catch(err){status(`Couldn't open ${name}. ${err.message}`,true)}}
+function readFile(f){const r=new FileReader();r.onload=()=>load(String(r.result),f.name);r.onerror=()=>status(`Couldn't read ${f.name}.`,true);r.readAsText(f)}
+$('fOpen').onclick=()=>$('fileIn').click();
+$('fileIn').onchange=e=>{const f=e.target.files[0];if(f)readFile(f);e.target.value=''};
+let newArm=null;
+$('fNew').onclick=()=>{const b=$('fNew');
+  if(E&&!newArm){b.textContent='Confirm new';newArm=setTimeout(()=>{newArm=null;b.textContent='New tree'},4000);status('Click Confirm new to replace the current tree. Undo brings it back.');return}
+  clearTimeout(newArm);newArm=null;b.textContent='New tree';if(E)snap();E=blank();sel={name:E.top,parent:null,idx:-1,t:'g'};render();status('New tree. Select the top box to add events and gates.')};
+document.addEventListener('dragover',e=>{if([...(e.dataTransfer?.types||[])].includes('Files')){e.preventDefault();document.body.classList.add('dragging')}});
+document.addEventListener('dragleave',e=>{if(!e.relatedTarget)document.body.classList.remove('dragging')});
+document.addEventListener('drop',e=>{const f=e.dataTransfer?.files?.[0];document.body.classList.remove('dragging');if(f){e.preventDefault();readFile(f)}});
+
+/* ---------- exports ---------- */
+const EXPORT_CSS=`text{font-family:"IBM Plex Sans",Arial,sans-serif}
+.ft-box{fill:#fff;stroke:#8995a3;stroke-width:1}.ft-box.top{stroke:#b45309;stroke-width:2;fill:#fbead6}.ft-box.spf{stroke:#b42318;stroke-width:1.6;fill:#fde7e4}.ft-box.frm{stroke:#2f5d8a;stroke-width:1.5;fill:#f3f6fa}.ft-box.empty{stroke:#b42318;stroke-dasharray:4 3}
+.ft-txt{font:11px "IBM Plex Sans",Arial,sans-serif;fill:#16202b}.ft-txt.b{font-weight:600}.ft-gate,.ft-basic{fill:#fff;stroke:#16202b;stroke-width:1.3}
+.ft-gname{font:600 8.5px "IBM Plex Mono",Menlo,monospace;fill:#16202b}.ft-basic.ccf{stroke:#2f5d8a;stroke-dasharray:3 2}.ft-basic.spf{stroke:#b42318;fill:#fde7e4}
+.ft-zero{opacity:.45}.ft-p{font:10px "IBM Plex Mono",Menlo,monospace;fill:#5b6774}.ft-wire{fill:none;stroke:#8995a3;stroke-width:1.1}
+.ft-xfer{fill:#fff;stroke:#2f5d8a;stroke-width:1.3}.ft-xtxt{font:10px "IBM Plex Mono",Menlo,monospace;fill:#2f5d8a}
+.ft-gp{font:10px "IBM Plex Mono",Menlo,monospace;fill:#b45309}.ft-tid{font:600 10px "IBM Plex Mono",Menlo,monospace;fill:#2f5d8a}.ft-basic.rep{stroke-width:2.4}.ft-rep{font:600 9.5px "IBM Plex Mono",Menlo,monospace;fill:#2f5d8a}`;
+function ftSvg(){const f=$('ft'),w=f.dataset.w,h=f.dataset.h,c=f.cloneNode(true);c.removeAttribute('id');c.removeAttribute('style');c.setAttribute('xmlns','http://www.w3.org/2000/svg');
+  c.setAttribute('width',w);c.setAttribute('height',h);c.querySelectorAll('.sel').forEach(n=>n.classList.remove('sel'));
+  const NS='http://www.w3.org/2000/svg',st=document.createElementNS(NS,'style');st.textContent=EXPORT_CSS;const bg=document.createElementNS(NS,'rect');
+  bg.setAttribute('width',w);bg.setAttribute('height',h);bg.setAttribute('fill','#ffffff');c.insertBefore(bg,c.firstChild);c.insertBefore(st,c.firstChild);
+  return'<?xml version="1.0" encoding="UTF-8"?>\n'+new XMLSerializer().serializeToString(c)}
+let pptxP=null;
+const loadPptx=()=>pptxP||(pptxP=new Promise((res,rej)=>{if(window.PptxGenJS)return res(window.PptxGenJS);
+  const sc=document.createElement('script');sc.src='https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js';
+  sc.onload=()=>window.PptxGenJS?res(window.PptxGenJS):rej(new Error('PptxGenJS missing'));sc.onerror=()=>{pptxP=null;rej(new Error('load failed'))};document.head.appendChild(sc)}));
+const PC={ink:'16202B',muted:'5B6774',line:'8995A3',accent:'B45309',accentSoft:'FBEAD6',crit:'B42318',critSoft:'FDE7E4',flow:'2F5D8A',flowSoft:'F3F6FA',white:'FFFFFF'};
+async function ftPptx(){
+  const L=lastTree;if(!L)throw new Error('no tree');
+  const Pptx=await loadPptx(),pres=new Pptx(),A=analyze(),title=E.gates[E.top].label;
+  const MAX=56,TITLE=0.9,MARGIN=0.3;          // PowerPoint's largest slide side is 56 in
+  const k=Math.min(1,(MAX-2*MARGIN)/(L.Wd/96),(MAX-TITLE-2*MARGIN)/(L.Hd/96));
+  const tw=L.Wd/96*k,th=L.Hd/96*k,SW=Math.max(13.333,tw+2*MARGIN),SH=Math.max(7.5,th+TITLE+2*MARGIN);
+  pres.defineLayout({name:'FT',width:SW,height:SH});pres.layout='FT';pres.title=title;
+  const ox=(SW-tw)/2,oy=TITLE+MARGIN,u=v=>v/96*k,X=v=>ox+u(v),Y=v=>oy+u(v),pt=px=>Math.max(4,px*0.75*k);
+  const slide=pres.addSlide();slide.background={color:'FFFFFF'};
+  const C=PC,F='Arial',SH_=pres.ShapeType;
+  slide.addText([{text:'Fault tree · '+title,options:{fontSize:20,bold:true,color:C.ink,breakLine:true}},
+    {text:`P(top) = ${fmt(A.P)} per mission · ${A.exact?'exact (BDD, repeated events counted once)':'rare-event approximation'} · ${A.rows.length} minimal cut sets`,options:{fontSize:11,color:C.muted}}],
+    {x:MARGIN,y:0.15,w:SW-2*MARGIN,h:TITLE-0.1,fontFace:F,valign:'top',margin:0});
+  const wire=(x1,y1,x2,y2)=>slide.addShape(SH_.line,{x:X(Math.min(x1,x2)),y:Y(Math.min(y1,y2)),w:u(Math.abs(x2-x1)),h:u(Math.abs(y2-y1)),line:{color:C.line,width:Math.max(.5,1.1*.75*k)}});
+  const txt=(t,x,y,w,h,o)=>slide.addText(t,Object.assign({x:X(x),y:Y(y),w:u(w),h:u(h),fontFace:F,margin:0,align:'center',valign:'middle'},o));
+  const stroke=w=>Math.max(.5,w*.75*k);
+  (function dr(n){const x=ftX(n),y=ftY(n),bw=FT.NW-14,s=n.k==='basic'&&L.spf.has(n.name),z=n.k==='basic'&&!(n.p>0),tr=z?50:0,fr=n.frame&&!n.top;
+    slide.addText(wrap(n.label,20).join('\n'),{shape:SH_.rect,x:X(x-bw/2),y:Y(y),w:u(bw),h:u(FT.BH),fontFace:F,fontSize:pt(11),bold:!!n.top,color:C.ink,align:'center',valign:'middle',margin:0,
+      fill:{color:n.top?C.accentSoft:s?C.critSoft:fr?C.flowSoft:C.white,transparency:tr},line:{color:n.top?C.accent:s?C.crit:fr?C.flow:C.line,width:stroke(n.top?2:s?1.6:fr?1.5:1),transparency:tr}});
+    if(n.tid&&n.k==='gate')txt(n.tid,x+bw/2-40,y-15,40,12,{fontSize:pt(10),bold:true,color:C.flow,align:'right',fontFace:'Courier New'});
+    const y0=y+42;wire(x,y+FT.BH,x,y0);
+    if(n.k==='gate'){
+      const sx=u(1),pts=n.g!=='AND'
+        ?[{x:0,y:24},{x:15,y:0,curve:{type:'quadratic',x1:0,y1:7}},{x:30,y:24,curve:{type:'quadratic',x1:30,y1:7}},{x:0,y:24,curve:{type:'quadratic',x1:15,y1:16}},{close:true}]
+        :[{x:0,y:24},{x:0,y:11},{x:14,y:0,curve:{type:'cubic',x1:0,y1:4.9,x2:6.3,y2:0}},{x:28,y:11,curve:{type:'cubic',x1:21.7,y1:0,x2:28,y2:4.9}},{x:28,y:24},{close:true}];
+      const gw=n.g!=='AND'?30:28;
+      slide.addShape(SH_.custGeom,{x:X(x-gw/2),y:Y(y0),w:u(gw),h:u(24),points:pts.map(q=>q.close?q:Object.assign({},q,{x:q.x*sx,y:q.y*sx},q.curve?{curve:Object.assign({},q.curve,
+        {x1:q.curve.x1*sx,y1:q.curve.y1*sx},q.curve.x2!=null?{x2:q.curve.x2*sx,y2:q.curve.y2*sx}:{})}:{})),fill:{color:C.white},line:{color:C.ink,width:stroke(1.3)}});
+      txt(n.g==='VOTE'?n.vk+'/'+n.vn:n.g,x-15,y0+11,30,11,{fontSize:pt(8.5),bold:true,color:C.ink,fontFace:'Courier New'});
+      if(n.p!=null)txt(fmt(n.p),x+18,y0+6,52,12,{fontSize:pt(10),color:C.accent,align:'left',fontFace:'Courier New'});
+      const yb=n.g!=='AND'?y0+20:y0+24,ym=y+FT.LH-14;
+      for(const c of n.ch){const xc=ftX(c);wire(x,yb,x,ym);wire(x,ym,xc,ym);wire(xc,ym,xc,ftY(c));dr(c)}
+    }else if(n.k==='basic'){
+      slide.addShape(SH_.ellipse,{x:X(x-12),y:Y(y0),w:u(24),h:u(24),fill:{color:s?C.critSoft:C.white,transparency:tr},
+        line:{color:s?C.crit:n.ccf?C.flow:C.ink,width:stroke(n.rep?2.4:1.3),dashType:n.ccf?'dash':'solid',transparency:tr}});
+      txt(fmt(n.p),x-40,y0+30,80,13,{fontSize:pt(10),color:C.muted,fontFace:'Courier New'});
+      if(n.rep)txt('R×'+n.rep,x+15,y0-2,34,12,{fontSize:pt(9.5),bold:true,color:C.flow,align:'left',fontFace:'Courier New'});
+    }else{
+      slide.addShape(SH_.triangle,{x:X(x-14),y:Y(y0),w:u(28),h:u(24),fill:{color:C.white},line:{color:C.flow,width:stroke(1.3)}});
+      txt(n.tid||'',x-40,y0+30,80,13,{fontSize:pt(10),color:C.flow,fontFace:'Courier New'});
+    }})(L.root);
+  slide.addNotes('Generated by Fault Tree Editor. Every box, gate, event and wire is a separate editable shape. R×n marks a basic event that appears n times in the tree; it is counted once in all probabilities.');
+  return pres.write({outputType:'arraybuffer'})}
+let dlP=null;
+const downloads=()=>dlP||(dlP=(window.claude&&window.claude.use?window.claude.use('downloads'):Promise.resolve(null)).catch(()=>null));
+function showSheet(title,note,text){$('sheetTitle').textContent=title;$('sheetNote').textContent=note;$('sheetText').value=text;$('sheet').hidden=false;$('sheetText').focus();$('sheetText').select()}
+function blobSave(filename,data){const u=URL.createObjectURL(new Blob([data]));const a=document.createElement('a');
+  a.href=u;a.download=filename;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),5000)}
+async function offer(filename,data,label,note,localName){
+  const d=await downloads();
+  if(d){try{await d.save({filename,data});status(`${label} saved as ${filename}`);return}
+    catch(e){if(e&&e.code==='declined'){status('Save cancelled');return}
+      if(e&&e.code==='rate_limited'){status('A save prompt is already open',true);return}}}
+  if(typeof data!=='string'||!window.claude){const n=localName||filename;blobSave(n,data);status(`${label} downloaded as ${n}`);return}
+  showSheet(label,(note?note+' ':'')+`Saving isn't available in this view, so copy the text below into a file named ${localName||filename}.`,data)}
+$('sheetClose').onclick=()=>{$('sheet').hidden=true};
+$('sheet').addEventListener('click',e=>{if(e.target.id==='sheet')$('sheet').hidden=true});
+$('sheetCopy').onclick=()=>{const t=$('sheetText');const ok=()=>{$('sheetCopy').textContent='Copied';setTimeout(()=>$('sheetCopy').textContent='Copy',1500)};
+  try{navigator.clipboard.writeText(t.value).then(ok,()=>{t.focus();t.select()})}catch(e){t.focus();t.select()}};
+const need=()=>{if(!E){status('Open or start a tree first.',true);return false}return true};
+$('fXml').onclick=()=>need()&&offer('fault-tree.opsa.xml.txt',toXml(),'Open-PSA XML','Saved with a .txt ending because .xml files cannot be saved from here; rename it to fault-tree.xml.','fault-tree.xml');
+$('fSvg').onclick=()=>need()&&offer('fault-tree.svg',ftSvg(),'Fault tree SVG');
+$('fPptx').onclick=async()=>{if(!need())return;const b=$('fPptx');b.disabled=true;status('Building PowerPoint…');
+  try{await offer('fault-tree.pptx',await ftPptx(),'Fault tree PowerPoint')}
+  catch(e){status(e&&e.message==='load failed'?"Couldn't load the PowerPoint library. Check your internet connection.":"Couldn't build the PowerPoint file.",true)}
+  finally{b.disabled=false}};
+
+if(E)sel={name:E.top,parent:null,idx:-1,t:'g'};
+render();
+</script>
+
+</body></html>
