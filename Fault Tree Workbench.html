@@ -99,7 +99,13 @@ input.bad{border-color:var(--critical)}
 .readout .v.crit{color:var(--critical)}
 .readout .s{font-size:12px;color:var(--muted)}
 #ft{display:block;width:100%;height:auto;max-height:78vh;margin:0 auto}
-.ft-wrap{padding:8px}
+.ft-wrap{padding:8px;overflow:auto;max-height:82vh}
+.ft-wrap.zoomed{cursor:grab}
+.ft-wrap.panning{cursor:grabbing;user-select:none}
+.ft-wrap.zoomed #ft{margin:0}
+.zoombar{display:flex;align-items:center;gap:4px}
+.zoombar button{padding:6px 10px}
+.zoombar .note{min-width:42px;text-align:right;font-family:var(--f-mono)}
 .ft-box{fill:var(--surface);stroke:var(--line-strong);stroke-width:1}
 .ft-box.top{stroke:var(--accent);stroke-width:2;fill:var(--accent-soft)}
 .ft-box.spf{stroke:var(--critical);stroke-width:1.6;fill:var(--critical-soft)}
@@ -185,6 +191,7 @@ tr.spf .bar>i{background:var(--critical)}
           <button id="btnAdd" type="button">+ Block</button>
           <button id="btnFrame" type="button">+ Frame</button>
           <button id="btnConnect" type="button">Connect</button>
+          <button id="btnTidy" type="button" title="Line blocks up in columns by flow, keeping their order; frames are refitted around their blocks">Tidy</button>
           <button id="btnCopy" type="button" title="Copy the selected block, or a frame with its blocks (Ctrl+C)">Copy</button>
           <button id="btnPaste" type="button" title="Paste (Ctrl+V)">Paste</button>
           <button id="btnDel" type="button" class="danger" title="Delete the selection (Delete key, or Ctrl+X to cut)">Delete</button>
@@ -228,8 +235,9 @@ tr.spf .bar>i{background:var(--critical)}
   <section class="panel"><div class="readout" id="readout"></div></section>
 
   <section class="panel">
-    <div class="panel-h"><h2>Generated fault tree</h2><span class="note">△ Tn = same branch as the box tagged Tn, drawn in full elsewhere · red = single-point failure <span data-ccf>· dashed = common cause</span> · blue box = frame · R×n = repeated event, counted once</span></div>
-    <div class="ft-wrap"><svg id="ft" aria-label="Generated fault tree"></svg></div>
+    <div class="panel-h"><h2>Generated fault tree</h2><div class="toolbar zoombar" aria-label="Zoom"><button id="zOut" type="button" title="Zoom out (Ctrl + wheel)" aria-label="Zoom out">−</button><button id="zFit" type="button" title="Show the whole tree">Fit</button><button id="zIn" type="button" title="Zoom in (Ctrl + wheel)" aria-label="Zoom in">+</button><span class="note" id="zLbl">100%</span></div></div>
+    <div class="ft-wrap" id="ftWrap"><svg id="ft" aria-label="Generated fault tree"></svg></div>
+    <div class="hint"><span>△ Tn = same branch as the box tagged Tn, drawn in full elsewhere</span><span>red = single-point failure</span><span data-ccf>dashed = common cause</span><span>blue box = frame</span><span>R×n = repeated event, counted once</span><span>Ctrl + wheel to zoom, drag to pan</span></div>
   </section>
 
   <div class="cols">
@@ -254,7 +262,8 @@ tr.spf .bar>i{background:var(--critical)}
 
 <script>
 const KEY='ft-workbench-v2';
-const W=128,H=54,CW=1300,CH=520;
+// the canvas is at least 1300 × 520 and grows when Tidy needs more room (saved as S.cw, S.ch)
+const W=128,H=54;let CW=1300,CH=520;
 const $=id=>document.getElementById(id);
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const uid=()=>Math.random().toString(36).slice(2,8);
@@ -319,7 +328,7 @@ function normalize(s){
   s.links=s.links.filter(l=>ids.has(l.from)&&ids.has(l.to)&&l.from!==l.to&&l.from!==s.top)
     .map(l=>({id:l.id||uid(),from:l.from,to:l.to,flow:String(l.flow||''),group:String(l.group||'')}));
   s.frames=(Array.isArray(s.frames)?s.frames:[]).map(f=>({id:f.id||uid(),label:String(f.label||'Subsystem'),
-    x:clamp(+f.x||0,0,CW-80),y:clamp(+f.y||0,0,CH-60),w:Math.max(80,+f.w||200),h:Math.max(60,+f.h||120)}));
+    x:clamp(+f.x||0,0,Math.max(CW,+s.cw||0)-80),y:clamp(+f.y||0,0,Math.max(CH,+s.ch||0)-60),w:Math.max(80,+f.w||200),h:Math.max(60,+f.h||120)}));
   return s;
 }
 let S,oldSave=false;
@@ -378,6 +387,7 @@ const clipText=(t,px,cw)=>{const n=Math.max(3,Math.floor(px/cw));return t.length
 
 /* ---------- IBD canvas ---------- */
 function renderIBD(){
+  CW=Math.max(1300,+S.cw||0);CH=Math.max(520,+S.ch||0);svg.setAttribute('viewBox',`0 0 ${CW} ${CH}`);
   const m=byId(),R=routes();
   let F='';
   for(const f of S.frames){const s=sel&&sel.t==='f'&&sel.id===f.id?' sel':'',lb=clipText(f.label,f.w-16,6.3),tw=Math.min(f.w,lb.length*6.3+16);
@@ -541,6 +551,52 @@ $('btnClear').onclick=()=>{const b=$('btnClear');
   S={T:S.T,ccfOn:S.ccfOn,ccf:{},vote:{},frames:[],blocks:[top],links:[],top:top.id,topText:top.name};
   sel=null;connect=false;pending=null;clip=null;refresh(true);status('Canvas cleared. Add blocks and connect them to the top event.')};
 $('btnReset').onclick=()=>{S=example();sel=null;connect=false;pending=null;refresh(true);status('Example restored')};
+
+/* ---------- Tidy: columns follow the flow, rows keep their current top-to-bottom order ---------- */
+// Frames are packed as one unit around their own blocks, so frame membership, and with it the fault tree, never changes.
+function tidy(){
+  const m=byId(),bs=S.blocks,ins=inputsOf(),outs=new Map();
+  for(const l of S.links)if(m[l.from]&&m[l.to]){if(!outs.has(l.from))outs.set(l.from,[]);outs.get(l.from).push(l.to)}
+  // column = longest chain of inputs behind a block; a loop is cut where it closes
+  const col=new Map(),vis=new Set();
+  const C=id=>{if(col.has(id))return col.get(id);if(vis.has(id))return 0;vis.add(id);let c=0;
+    for(const l of ins.get(id)||[])if(m[l.from])c=Math.max(c,C(l.from)+1);vis.delete(id);col.set(id,c);return c};
+  bs.forEach(b=>C(b.id));
+  // a block with no inputs sits just before the first block that uses it, not far out on the left
+  for(const b of bs)if(!(ins.get(b.id)||[]).length&&outs.has(b.id))col.set(b.id,Math.max(0,Math.min(...outs.get(b.id).map(t=>col.get(t)))-1));
+  const top=bs.find(isTop);if(top)col.set(top.id,Math.max(0,...bs.filter(b=>!isTop(b)).map(b=>col.get(b.id)))+1);
+  const used=[...new Set(col.values())].sort((a,b)=>a-b),ci=new Map(used.map((c,i)=>[c,i]));for(const[k,v]of col)col.set(k,ci.get(v));
+  // frames and their nesting, from current membership
+  const fr=S.frames.map(f=>({f,mem:new Set(bs.filter(b=>inFrame(f,b)).map(b=>b.id))})).filter(x=>x.mem.size);
+  for(const a of fr){a.parent=null;for(const b of fr)if(b!==a&&[...a.mem].every(x=>b.mem.has(x))&&(b.mem.size>a.mem.size||b.f.w*b.f.h>a.f.w*a.f.h)&&(!a.parent||b.mem.size<a.parent.mem.size))a.parent=b}
+  const home=new Map(bs.map(b=>[b.id,fr.filter(x=>x.mem.has(b.id)).sort((p,q)=>p.mem.size-q.mem.size)[0]||null]));
+  const PADT=28,PADB=12,GAP=16;
+  // pack items top to bottom near their current height, never overlapping in any column they span
+  function pack(items){const occ=new Map();
+    const free=(it,y)=>{for(let c=it.cols[0];c<=it.cols[1];c++)for(const[a,b]of occ.get(c)||[])if(y<b+GAP&&y+it.h+GAP>a)return false;return true};
+    items.sort((p,q)=>p.pref-q.pref);
+    for(const it of items){const cand=[Math.max(0,it.pref)];let low=0;
+      for(let c=it.cols[0];c<=it.cols[1];c++)for(const[a,b]of occ.get(c)||[]){cand.push(b+GAP,a-GAP-it.h);low=Math.max(low,b+GAP)}cand.push(low);
+      let best=null;for(const y of cand)if(y>=0&&free(it,y)&&(best==null||Math.abs(y-it.pref)<Math.abs(best-it.pref)))best=y;
+      it.y=Math.round(best);for(let c=it.cols[0];c<=it.cols[1];c++){if(!occ.has(c))occ.set(c,[]);occ.get(c).push([it.y,it.y+it.h])}}
+    return items}
+  function cluster(x){const oy=x?x.f.y:0,items=fr.filter(c=>c.parent===x).map(cluster);
+    for(const b of bs)if(home.get(b.id)===x)items.push({b,cols:[col.get(b.id),col.get(b.id)],h:H,pref:b.y-oy,lev:-1});
+    pack(items);const lev=1+Math.max(-1,...items.map(i=>i.lev));
+    const h=Math.max(0,...items.map(i=>i.y+i.h));
+    if(!x)return{items,h,lev};
+    return{x,items,lev,cols:[Math.min(...items.map(i=>i.cols[0])),Math.max(...items.map(i=>i.cols[1]))],h:h+PADT+PADB,pref:x.f.y-(x.parent?x.parent.f.y:0)}}
+  const root=cluster(null),maxPad=12+8*Math.max(0,root.lev),n=used.length||1;
+  const P=Math.max(W+2*maxPad+12,Math.min(260,(1300-60-W-2*maxPad)/Math.max(1,n-1)));
+  const colX=c=>30+maxPad+c*P,OY=22;
+  (function place(items,oy){for(const it of items){
+    if(it.b){it.b.x=Math.round(colX(it.cols[0]));it.b.y=oy+it.y;continue}
+    const pad=12+8*it.lev,f=it.x.f;f.x=Math.round(colX(it.cols[0])-pad);f.w=Math.round(colX(it.cols[1])+W+pad-f.x);f.y=oy+it.y;f.h=it.h;
+    place(it.items,f.y+PADT)}})(root.items,OY);
+  S.cw=Math.ceil(Math.max(1300,colX(n-1)+W+maxPad+30));S.ch=Math.ceil(Math.max(520,OY+root.h+30));
+  if(S.cw===1300)delete S.cw;if(S.ch===520)delete S.ch;
+  refresh(true);status(`Tidied into ${n} column${n===1?'':'s'} following the flow. Frames still hold the same blocks. Ctrl+Z undoes it.`)}
+$('btnTidy').onclick=tidy;
 
 /* ---------- copy and paste ---------- */
 function copySel(){
@@ -764,9 +820,39 @@ function tagTransfers(root,key){const want=new Set(),ids=new Map();
   (function w(n){if(n.k==='gate'){const k=key(n);if(k!=null&&want.has(k)&&!ids.has(k)){ids.set(k,'T'+(ids.size+1));n.tid=ids.get(k)}n.ch.forEach(w)}})(root);
   (function w(n){if(n.k==='xfer')n.tid=ids.get(key(n));else(n.ch||[]).forEach(w)})(root)}
 const ftX=n=>FT.PAD+n.x*FT.NW+FT.NW/2,ftY=n=>n.y;
+/* ---------- tree zoom: Fit shows the whole tree; zoomed in, the panel scrolls and you drag to pan ---------- */
+const zoom={z:null};                                   // null = fit to the panel
+const ZMIN=.1,ZMAX=2.5;
+function fitScale(){const ft=$('ft'),r=ft.getBoundingClientRect(),w=+ft.dataset.w||1,h=+ft.dataset.h||1;return Math.min(r.width/w,r.height/h)||1}
+// where tree coordinate (0,0) sits on screen, allowing for letterboxing in fit mode
+function treeOrigin(){const ft=$('ft'),r=ft.getBoundingClientRect(),w=+ft.dataset.w,h=+ft.dataset.h,s=zoom.z??fitScale();
+  return{x:r.left+(r.width-w*s)/2,y:r.top+(r.height-h*s)/2,s}}
+function applyZoom(){const ft=$('ft'),wr=$('ftWrap'),w=+ft.dataset.w,h=+ft.dataset.h;
+  if(zoom.z==null){Object.assign(ft.style,{width:'',height:'',maxWidth:w+'px',maxHeight:'',aspectRatio:`${w} / ${h}`});wr.classList.remove('zoomed')}
+  else{Object.assign(ft.style,{width:w*zoom.z+'px',height:h*zoom.z+'px',maxWidth:'none',maxHeight:'none',aspectRatio:''});wr.classList.add('zoomed')}
+  $('zLbl').textContent=Math.round((zoom.z??fitScale())*100)+'%'}
+// zoom to z, keeping the tree point under (cx, cy) in place; defaults to the panel centre
+function setZoom(z,cx,cy){const wr=$('ftWrap'),r=wr.getBoundingClientRect();cx=cx??r.left+wr.clientWidth/2;cy=cy??r.top+wr.clientHeight/2;
+  const o=treeOrigin(),tx=(cx-o.x)/o.s,ty=(cy-o.y)/o.s;zoom.z=Math.min(ZMAX,Math.max(ZMIN,z));applyZoom();
+  const o2=treeOrigin();wr.scrollLeft+=o2.x+tx*zoom.z-cx;wr.scrollTop+=o2.y+ty*zoom.z-cy}
+function centreOn(tx,ty,z){setZoom(z);const wr=$('ftWrap'),r=wr.getBoundingClientRect(),o=treeOrigin();
+  wr.scrollLeft+=o.x+tx*o.s-(r.left+wr.clientWidth/2);wr.scrollTop+=o.y+ty*o.s-(r.top+wr.clientHeight/2)}
+let pan=null,panMoved=false;
+(function wireZoom(){const wr=$('ftWrap');
+  $('zIn').onclick=()=>setZoom((zoom.z??fitScale())*1.25);
+  $('zOut').onclick=()=>setZoom((zoom.z??fitScale())/1.25);
+  $('zFit').onclick=()=>{zoom.z=null;applyZoom();wr.scrollTo(0,0)};
+  // Ctrl or ⌘ + wheel zooms (a trackpad pinch arrives the same way); a plain wheel scrolls the page as usual
+  wr.addEventListener('wheel',e=>{if(!e.ctrlKey&&!e.metaKey)return;e.preventDefault();setZoom((zoom.z??fitScale())*Math.exp(-e.deltaY*.0015),e.clientX,e.clientY)},{passive:false});
+  wr.addEventListener('pointerdown',e=>{panMoved=false;if(zoom.z==null||e.button!==0)return;pan={x:e.clientX,y:e.clientY,l:wr.scrollLeft,t:wr.scrollTop,id:e.pointerId}});
+  wr.addEventListener('pointermove',e=>{if(!pan)return;const dx=e.clientX-pan.x,dy=e.clientY-pan.y;
+    if(!panMoved){if(Math.hypot(dx,dy)<4)return;panMoved=true;wr.setPointerCapture(pan.id);wr.classList.add('panning')}
+    wr.scrollLeft=pan.l-dx;wr.scrollTop=pan.t-dy});
+  const endPan=()=>{pan=null;wr.classList.remove('panning')};wr.addEventListener('pointerup',endPan);wr.addEventListener('pointercancel',endPan);
+  addEventListener('resize',()=>{if(zoom.z==null)applyZoom()})})();
 function drawTree(spf,M,St){
   const T=buildTree(M,St),root=T.root,ft=$('ft');
-  if(!root){lastTree=null;ft.setAttribute('viewBox','0 0 420 60');ft.style.maxWidth='420px';ft.style.aspectRatio='7';ft.dataset.w=420;ft.dataset.h=60;
+  if(!root){lastTree=null;ft.setAttribute('viewBox','0 0 420 60');ft.dataset.w=420;ft.dataset.h=60;zoom.z=null;applyZoom();
     ft.innerHTML=`<text class="ft-txt" x="16" y="34">Connect blocks to the TOP EVENT node to generate the tree.</text>`;return T}
   tagTransfers(root,n=>n.bid);
   const{Wd,Hd}=layTree(root);let o='';
@@ -792,7 +878,7 @@ function drawTree(spf,M,St){
     }})(root);
   // Fit: scale to the panel width (never above natural size) and cap height to the viewport, so the whole tree is visible without scrolling
   ft.setAttribute('viewBox',`0 0 ${Wd} ${Hd}`);ft.removeAttribute('width');ft.removeAttribute('height');
-  ft.style.maxWidth=Wd+'px';ft.style.aspectRatio=`${Wd} / ${Hd}`;ft.dataset.w=Wd;ft.dataset.h=Hd;ft.innerHTML=o;
+  ft.dataset.w=Wd;ft.dataset.h=Hd;ft.innerHTML=o;applyZoom();
   lastTree={root,Wd,Hd,spf};
   return T;
 }

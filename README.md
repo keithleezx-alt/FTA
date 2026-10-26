@@ -88,6 +88,7 @@ The workbench needs four inputs to produce a fault tree. An IBD alone isn't enou
 | **+ Block** | Add a block. |
 | **+ Frame** | Add a labelled frame in the top-left corner, then drag it over the blocks it should group. The button only works when no block is selected, so a new frame is never tied to one component; click empty canvas to deselect first. See [Frames](#frames). |
 | **Connect** | Draw a connection: tap the source, then the target. The top-event node can only be a target. |
+| **Tidy** | Line everything up. See [Tidy](#tidy). Ctrl+Z undoes it. |
 | **Copy** / **Paste** | Copy the selected block, or a selected frame together with the blocks inside it and the connections between them, then paste a copy offset from the original. **Ctrl+C** / **Ctrl+V** (**⌘C** / **⌘V** on a Mac) work too. Pasting again places further copies. |
 | **Delete** | Delete the selected block (and its connections), connection or frame. Deleting a frame keeps its blocks. The top-event node can't be deleted. The **Delete** or **Backspace** key does the same. **Ctrl+X** (**⌘X** on a Mac) cuts instead: it copies the selection, then deletes it, and the next **Ctrl+V** puts it back in place. Cutting a frame removes its blocks too. |
 | **Clear** | Remove every block, connection and frame, leaving only the top-event node, for a blank slate. Click **Confirm clear** within 4 seconds to go ahead. Save first if you want to keep your work. |
@@ -98,6 +99,17 @@ Drag blocks or frames to move them; moving a frame moves the blocks inside it. D
 **Copies are new, independent components.** A pasted block keeps the original's name and failure data, so rename it. The exception is a block with a shared failure event tag: its copy keeps the tag, so it's the same failure drawn again. That's a quick way to draw a shared component in a second place.
 
 **Connections run in any direction.** Each connection leaves from the side of the source block that faces the target and enters the target on the side facing the source: left or right when the blocks are side by side, top or bottom when one is stacked above the other. Several connections on one side are spread out so they don't overlap. The arrowhead shows the direction of flow.
+
+### Tidy
+
+**Tidy** rearranges the diagram so it's neat and aligned, without changing the analysis:
+
+- **Columns follow the flow.** Blocks are placed left to right by how many inputs lead up to them, and the top event goes in the last column on the right. A block with no inputs, such as a battery or antenna, sits just before the first block that uses it.
+- **Rows keep your order.** Within each column, blocks stay in their current top-to-bottom order and are snapped into straight, evenly spaced rows.
+- **Frames move as a unit.** Each frame is refitted tightly around its own blocks, and no other block ends up inside it, so every frame keeps the same members. Nested frames stay nested.
+- **The canvas can grow.** If the tidied diagram doesn't fit the standard 1300 × 520 canvas, the canvas is enlarged.
+
+The fault tree, probabilities and cut sets are identical before and after.
 
 ### Block settings
 
@@ -167,7 +179,18 @@ Lists each CCF group with editable **α₁ … αₘ** values (m = number of mem
 | **Minimal cut sets table** | Each set with its order (SPF, CCF, ×2, ×3…), probability and share of the total. |
 | **Component importance** | Fussell–Vesely: the share of P(top) that disappears if the event can't occur. |
 
-The tree preview always scales to fit the panel width and the window height, so the whole tree is visible without scrolling. Hover over a box to read its full label and probability. Use the PowerPoint or SVG export to see a large tree at full size.
+The tree preview starts at **Fit**: it scales to the panel width and the window height, so the whole tree is visible without scrolling. Hover over a box to read its full label and probability.
+
+To read or work on part of a large tree, zoom in:
+
+| Control | Action |
+|---|---|
+| **+** / **−** | Zoom in or out around the centre of the panel. The percentage shows the current size. |
+| **Ctrl + mouse wheel** (**⌘** on a Mac), or a trackpad pinch | Zoom around the pointer. A plain wheel still scrolls the page. |
+| Drag | Pan when zoomed in. |
+| **Fit** | Return to the whole-tree view. |
+
+The zoom level stays put while you edit. The PowerPoint and SVG exports are always full size, whatever the zoom.
 
 ---
 
@@ -379,7 +402,8 @@ The current project is kept in your browser automatically (key `ft-workbench-v2`
 | `blocks[].v` | number | λ per hour (`rate`) or probability 0–1 (`prob`). |
 | `blocks[].ccf` | string | Common-cause group name, or empty. |
 | `blocks[].rep` | string | Shared failure event tag, or empty. Blocks with the same tag share one basic event. |
-| `blocks[].x`, `y` | number | Position on the 1300 × 520 canvas. |
+| `blocks[].x`, `y` | number | Position on the canvas. |
+| `cw`, `ch` | number | Canvas size, when Tidy has enlarged it beyond 1300 × 520. |
 | `links[].from` / `to` | string | Source and target block ids. |
 | `links[].flow` | string | Flow label. |
 | `links[].group` | string | Redundancy group name, or empty for a required input. |
@@ -421,7 +445,7 @@ The tree is kept in your browser automatically (key `ft-editor-v1`). Changes don
 
 ### Editing
 
-Tap any box in the tree to select it. The panel on the right shows what you can change.
+Tap any box in the tree to select it. The panel on the right shows what you can change. The tree has the same zoom controls as the workbench (**−**, **Fit**, **+**, Ctrl + wheel, drag to pan). **Selection**, or a double-click on a box, zooms to 100% centred on that box.
 
 | Selected | What you can do |
 |---|---|

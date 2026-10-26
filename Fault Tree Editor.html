@@ -97,7 +97,13 @@ input.bad{border-color:var(--critical)}
 .readout .v.crit{color:var(--critical)}
 .readout .s{font-size:12px;color:var(--muted)}
 #ft{display:block;width:100%;height:auto;max-height:78vh;margin:0 auto}
-.ft-wrap{padding:8px}
+.ft-wrap{padding:8px;overflow:auto;max-height:82vh}
+.ft-wrap.zoomed{cursor:grab}
+.ft-wrap.panning{cursor:grabbing;user-select:none}
+.ft-wrap.zoomed #ft{margin:0}
+.zoombar{display:flex;align-items:center;gap:4px}
+.zoombar button{padding:6px 10px}
+.zoombar .note{min-width:42px;text-align:right;font-family:var(--f-mono)}
 .ft-box{fill:var(--surface);stroke:var(--line-strong);stroke-width:1}
 .ft-box.top{stroke:var(--accent);stroke-width:2;fill:var(--accent-soft)}
 .ft-box.spf{stroke:var(--critical);stroke-width:1.6;fill:var(--critical-soft)}
@@ -188,8 +194,9 @@ td.lab{min-width:180px}
 
   <div class="ed">
     <section class="panel">
-      <div class="panel-h"><h2 id="treeTitle">Fault tree</h2><span class="note">Tap a box to edit it · △ Tn = same gate as the box tagged Tn, drawn in full elsewhere · red = single-point failure · R×n = repeated event, counted once</span></div>
-      <div class="ft-wrap"><svg id="ft" aria-label="Fault tree"></svg></div>
+      <div class="panel-h"><h2 id="treeTitle">Fault tree</h2><div class="toolbar zoombar" aria-label="Zoom"><button id="zSel" type="button" title="Zoom to the selected box (or double-click a box)">Selection</button><button id="zOut" type="button" title="Zoom out (Ctrl + wheel)" aria-label="Zoom out">−</button><button id="zFit" type="button" title="Show the whole tree">Fit</button><button id="zIn" type="button" title="Zoom in (Ctrl + wheel)" aria-label="Zoom in">+</button><span class="note" id="zLbl">100%</span></div></div>
+      <div class="ft-wrap" id="ftWrap"><svg id="ft" aria-label="Fault tree"></svg></div>
+      <div class="hint"><span>Tap a box to edit it; double-click to zoom to it</span><span>△ Tn = same gate as the box tagged Tn, drawn in full elsewhere</span><span>red = single-point failure</span><span>R×n = repeated event, counted once</span><span>Ctrl + wheel to zoom, drag to pan</span></div>
     </section>
     <aside class="panel insp"><div class="sect" id="insp"></div>
       <div class="sect"><h2>How it calculates</h2>
@@ -407,6 +414,36 @@ function layTree(root){let leaf=0;const rows=[];
   (function pos(n){n.y=top[n.d];n.bh=rows[n.d];n.ym=top[n.d+1]-14;(n.ch||[]).forEach(pos)})(root);
   return{Wd:leaf*FT.NW+FT.PAD*2,Hd:top[rows.length]}}
 const isSel=n=>sel&&sel.name===n.name&&sel.parent===n.parent&&sel.idx===n.idx;
+/* ---------- tree zoom: Fit shows the whole tree; zoomed in, the panel scrolls and you drag to pan ---------- */
+const zoom={z:null};                                   // null = fit to the panel
+const ZMIN=.1,ZMAX=2.5;
+function fitScale(){const ft=$('ft'),r=ft.getBoundingClientRect(),w=+ft.dataset.w||1,h=+ft.dataset.h||1;return Math.min(r.width/w,r.height/h)||1}
+// where tree coordinate (0,0) sits on screen, allowing for letterboxing in fit mode
+function treeOrigin(){const ft=$('ft'),r=ft.getBoundingClientRect(),w=+ft.dataset.w,h=+ft.dataset.h,s=zoom.z??fitScale();
+  return{x:r.left+(r.width-w*s)/2,y:r.top+(r.height-h*s)/2,s}}
+function applyZoom(){const ft=$('ft'),wr=$('ftWrap'),w=+ft.dataset.w,h=+ft.dataset.h;
+  if(zoom.z==null){Object.assign(ft.style,{width:'',height:'',maxWidth:w+'px',maxHeight:'',aspectRatio:`${w} / ${h}`});wr.classList.remove('zoomed')}
+  else{Object.assign(ft.style,{width:w*zoom.z+'px',height:h*zoom.z+'px',maxWidth:'none',maxHeight:'none',aspectRatio:''});wr.classList.add('zoomed')}
+  $('zLbl').textContent=Math.round((zoom.z??fitScale())*100)+'%'}
+// zoom to z, keeping the tree point under (cx, cy) in place; defaults to the panel centre
+function setZoom(z,cx,cy){const wr=$('ftWrap'),r=wr.getBoundingClientRect();cx=cx??r.left+wr.clientWidth/2;cy=cy??r.top+wr.clientHeight/2;
+  const o=treeOrigin(),tx=(cx-o.x)/o.s,ty=(cy-o.y)/o.s;zoom.z=Math.min(ZMAX,Math.max(ZMIN,z));applyZoom();
+  const o2=treeOrigin();wr.scrollLeft+=o2.x+tx*zoom.z-cx;wr.scrollTop+=o2.y+ty*zoom.z-cy}
+function centreOn(tx,ty,z){setZoom(z);const wr=$('ftWrap'),r=wr.getBoundingClientRect(),o=treeOrigin();
+  wr.scrollLeft+=o.x+tx*o.s-(r.left+wr.clientWidth/2);wr.scrollTop+=o.y+ty*o.s-(r.top+wr.clientHeight/2)}
+let pan=null,panMoved=false;
+(function wireZoom(){const wr=$('ftWrap');
+  $('zIn').onclick=()=>setZoom((zoom.z??fitScale())*1.25);
+  $('zOut').onclick=()=>setZoom((zoom.z??fitScale())/1.25);
+  $('zFit').onclick=()=>{zoom.z=null;applyZoom();wr.scrollTo(0,0)};
+  // Ctrl or ⌘ + wheel zooms (a trackpad pinch arrives the same way); a plain wheel scrolls the page as usual
+  wr.addEventListener('wheel',e=>{if(!e.ctrlKey&&!e.metaKey)return;e.preventDefault();setZoom((zoom.z??fitScale())*Math.exp(-e.deltaY*.0015),e.clientX,e.clientY)},{passive:false});
+  wr.addEventListener('pointerdown',e=>{panMoved=false;if(zoom.z==null||e.button!==0)return;pan={x:e.clientX,y:e.clientY,l:wr.scrollLeft,t:wr.scrollTop,id:e.pointerId}});
+  wr.addEventListener('pointermove',e=>{if(!pan)return;const dx=e.clientX-pan.x,dy=e.clientY-pan.y;
+    if(!panMoved){if(Math.hypot(dx,dy)<4)return;panMoved=true;wr.setPointerCapture(pan.id);wr.classList.add('panning')}
+    wr.scrollLeft=pan.l-dx;wr.scrollTop=pan.t-dy});
+  const endPan=()=>{pan=null;wr.classList.remove('panning')};wr.addEventListener('pointerup',endPan);wr.addEventListener('pointercancel',endPan);
+  addEventListener('resize',()=>{if(zoom.z==null)applyZoom()})})();
 function drawTree(A){
   const T=buildTree(A),root=T.root,ft=$('ft');drawn=T.nodes;
   tagTransfers(root,n=>n.name);
@@ -433,10 +470,15 @@ function drawTree(A){
       o+=`<path class="ft-xfer" d="M${x},${y0} L${x+14},${y0+24} L${x-14},${y0+24}Z"/><text class="ft-xtxt" x="${x}" y="${y0+40}" text-anchor="middle">${n.tid||''}<title>Transfer ${n.tid||''}: same branch as the box tagged ${n.tid||''}, drawn in full elsewhere</title></text></g>`;
     }})(root);
   // fit the panel: never above natural size, height capped to the viewport
-  ft.setAttribute('viewBox',`0 0 ${Wd} ${Hd}`);ft.style.maxWidth=Wd+'px';ft.style.aspectRatio=`${Wd} / ${Hd}`;ft.dataset.w=Wd;ft.dataset.h=Hd;ft.innerHTML=o;
+  ft.setAttribute('viewBox',`0 0 ${Wd} ${Hd}`);ft.dataset.w=Wd;ft.dataset.h=Hd;ft.innerHTML=o;applyZoom();
   lastTree={root,Wd,Hd,spf:A.spf};return T}
-$('ft').addEventListener('click',e=>{const g=e.target.closest('[data-i]');if(!g)return;const n=drawn[+g.dataset.i];
+// a drag that pans the zoomed tree isn't a click on a box
+$('ft').addEventListener('click',e=>{if(panMoved){panMoved=false;return}const g=e.target.closest('[data-i]');if(!g)return;const n=drawn[+g.dataset.i];
   sel={name:n.name,parent:n.parent,idx:n.idx,t:n.k==='basic'?'e':'g'};render()});
+function zoomToSel(){if(!E||!sel){status('Select a box in the tree first.',true);return}
+  const n=drawn.find(d=>isSel(d))||drawn.find(d=>d.name===sel.name);if(!n)return;centreOn(ftX(n),n.y+n.bh/2,Math.max(1,zoom.z??0))}
+$('ft').addEventListener('dblclick',e=>{const g=e.target.closest('[data-i]');if(!g)return;e.preventDefault();zoomToSel()});
+$('zSel').onclick=zoomToSel;
 
 /* ---------- editing actions ---------- */
 function act(fn,msg){snap();fn();gc(E);render();if(msg)status(msg)}
@@ -505,7 +547,7 @@ function renderInsp(A,U){
 /* ---------- render ---------- */
 function render(keepInsp){
   save();$('fUndo').disabled=!undo.length;$('fRedo').disabled=!redo.length;
-  if(!E){$('readout').innerHTML='';$('ft').removeAttribute('viewBox');$('ft').style.aspectRatio='';$('ft').innerHTML='';
+  if(!E){zoom.z=null;$('readout').innerHTML='';$('ft').removeAttribute('viewBox');$('ft').style.aspectRatio='';$('ft').innerHTML='';
     $('ft').parentNode.querySelector('.empty-state')||$('ft').insertAdjacentHTML('afterend',`<div class="empty-state"><p>Open an Open-PSA XML file to edit it. In the Fault Tree Workbench, use <b>Fault tree → Open-PSA XML</b>; files from other Open-PSA tools with OR, AND and at-least gates work too. You can also drop a file here, or start a new tree.</p><div class="row"><button type="button" onclick="$('fOpen').click()">Open XML…</button><button type="button" onclick="$('fNew').click()">New tree</button></div></div>`);
     $('insp').innerHTML='<h2>Selection</h2><p class="empty">No tree open.</p>';$('evBody').innerHTML='';$('csBody').innerHTML='';$('evCount').textContent='';$('csCount').textContent='';$('treeTitle').textContent='Fault tree';return}
   document.querySelector('.empty-state')?.remove();
