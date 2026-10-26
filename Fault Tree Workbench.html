@@ -37,6 +37,7 @@ h2{font-family:var(--f-display);font-weight:600;font-size:13px;letter-spacing:.0
 .toolbar{display:flex;flex-wrap:wrap;gap:6px}
 button{font:500 13px/1 var(--f-body);color:var(--ink);background:var(--surface);border:1px solid var(--line-strong);border-radius:4px;padding:8px 11px;cursor:pointer}
 button:hover{background:var(--sunk)}
+button:disabled{opacity:.45;cursor:not-allowed;background:var(--surface)}
 button.on{background:var(--accent);border-color:var(--accent);color:var(--surface)}
 button.danger{color:var(--critical);border-color:var(--critical)}
 button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
@@ -73,6 +74,8 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .insp{display:flex;flex-direction:column}
 .sect{padding:12px 14px;display:flex;flex-direction:column;gap:10px;border-bottom:1px solid var(--line)}
 .sect:last-child{border-bottom:0}
+label.chk{display:flex;gap:8px;align-items:center;font-size:13.5px;font-weight:500;cursor:pointer}
+label.chk input{width:auto;margin:0;accent-color:var(--accent)}
 label.f{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted)}
 input,select{font:14px var(--f-body);color:var(--ink);background:var(--bg);border:1px solid var(--line-strong);border-radius:4px;padding:7px 9px;width:100%;box-sizing:border-box}
 input.mono{font-family:var(--f-mono)}
@@ -158,7 +161,7 @@ tr.spf .bar>i{background:var(--critical)}
   <header>
     <div>
       <h1>IBD <span class="arrow">→</span> Fault Tree</h1>
-      <p class="sub">Draw the internal block diagram, give each block a failure rate or fixed probability, mark redundant inputs and common-cause groups, and connect the blocks whose loss causes the top event. Frames group blocks under a labelled event in the tree. The fault tree, minimal cut sets and top-event probability regenerate as you edit.</p>
+      <p class="sub">Draw the internal block diagram, give each block a failure rate or fixed probability, mark redundant inputs<span data-ccf> and common-cause groups</span>, and connect the blocks whose loss causes the top event. Frames group blocks under a labelled event in the tree. The fault tree, minimal cut sets and top-event probability regenerate as you edit.</p>
     </div>
     <span class="tag">Example data · fake rates</span>
   </header>
@@ -207,15 +210,17 @@ tr.spf .bar>i{background:var(--critical)}
         <p class="note">The top event is the <b>TOP EVENT</b> node on the diagram. It isn't a component: connect the blocks whose loss causes it, using a redundancy group for k-of-n logic.</p>
         <label class="f">Mission time (hours)<input id="missionT" class="mono" type="text" inputmode="decimal"></label>
         <p class="note">Blocks with a constant failure rate λ use P = 1 − e<sup>−λT</sup> over the mission time. Fixed-probability blocks ignore it.</p>
+        <label class="chk"><input id="ccfOn" type="checkbox"> Model common-cause failures</label>
+        <p class="note" id="ccfOnNote"></p>
       </div>
       <div class="sect" id="insp"></div>
-      <div class="sect" id="ccfSect"></div>
+      <div class="sect" id="ccfSect" data-ccf></div>
       <div class="sect">
         <h2>Failure logic</h2>
         <p class="note">A block's output is lost if the block itself fails, <b>or</b> any required input is lost, <b>or</b> a redundancy group is lost. A group is lost when at least k of its n inputs are lost (k = n by default). A block with probability 0 never fails on its own.</p>
         <p class="note">A block that feeds several others is one basic event, however many branches of the tree it appears in. Blocks given the same <b>shared failure event</b> tag are one physical failure drawn in several places, and also share one event. Each event is counted once: probabilities are computed exactly from a binary decision diagram, so a repeated event is never double counted.</p>
         <p class="note">A <b>frame</b> groups the failures that leave it under one labelled event in the tree, such as "Failure of primary GNSS". Frames add context only; they never change the probability.</p>
-        <p class="note">Common-cause groups use the alpha-factor model: Q<sub>k</sub> = k / C(m−1, k−1) · α<sub>k</sub> / α<sub>t</sub> · Q<sub>t</sub>, with α<sub>t</sub> = Σ k·α<sub>k</sub>.</p>
+        <p class="note" data-ccf>Common-cause groups use the alpha-factor model: Q<sub>k</sub> = k / C(m−1, k−1) · α<sub>k</sub> / α<sub>t</sub> · Q<sub>t</sub>, with α<sub>t</sub> = Σ k·α<sub>k</sub>.</p>
       </div>
     </aside>
   </div>
@@ -223,7 +228,7 @@ tr.spf .bar>i{background:var(--critical)}
   <section class="panel"><div class="readout" id="readout"></div></section>
 
   <section class="panel">
-    <div class="panel-h"><h2>Generated fault tree</h2><span class="note">△ Tn = same branch as the box tagged Tn, drawn in full elsewhere · red = single-point failure · dashed = common cause · blue box = frame · R×n = repeated event, counted once</span></div>
+    <div class="panel-h"><h2>Generated fault tree</h2><span class="note">△ Tn = same branch as the box tagged Tn, drawn in full elsewhere · red = single-point failure <span data-ccf>· dashed = common cause</span> · blue box = frame · R×n = repeated event, counted once</span></div>
     <div class="ft-wrap"><svg id="ft" aria-label="Generated fault tree"></svg></div>
   </section>
 
@@ -260,7 +265,7 @@ function example(){
   const b=(id,name,v,x,y,st,ccf='')=>({id,name,mode:'rate',v,x,y,st,ccf,rep:'',kind:''});
   const motors=[1,2,3,4,5,6].map(i=>b('m'+i,'Motor '+i,2e-5,885,12+(i-1)*83,'actuation'));
   const top={id:'thrust',kind:'top',name:'Loss of thrust',mode:'prob',v:0,x:1150,y:220,st:'',ccf:'',rep:''};
-  return {top:'thrust',topText:'Loss of thrust',T:1,ccf:{IMU:[0.95,0.05],GNSS:[0.95,0.05]},vote:{'thrust|Rotors':2},
+  return {top:'thrust',topText:'Loss of thrust',T:1,ccfOn:true,ccf:{IMU:[0.95,0.05],GNSS:[0.95,0.05]},vote:{'thrust|Rotors':2},
     frames:[{id:'fimu',label:'Loss of attitude data',x:344,y:16,w:160,h:184},{id:'fgnss',label:'Loss of position data',x:344,y:286,w:160,h:184}],
     blocks:[
       b('bat','Battery',2e-5,10,220,'power'),
@@ -290,7 +295,7 @@ function groupSize(to,g){return S.links.filter(l=>l.to===to&&l.group===g).length
 function voteK(to,g,n){const k=Math.round(+(S.vote||{})[vkey(to,g)]);return k>=1&&k<=n?k:n}
 function normalize(s){
   if(!s||!Array.isArray(s.blocks)||!Array.isArray(s.links))throw new Error('missing blocks or links');
-  s.ccf=s.ccf&&typeof s.ccf==='object'?s.ccf:{};s.vote=s.vote&&typeof s.vote==='object'?s.vote:{};s.T=+s.T>0?+s.T:1;s.topText=String(s.topText||'');
+  s.ccf=s.ccf&&typeof s.ccf==='object'?s.ccf:{};s.ccfOn=typeof s.ccfOn==='boolean'?s.ccfOn:s.blocks.some(b=>String(b.ccf||'').trim());s.vote=s.vote&&typeof s.vote==='object'?s.vote:{};s.T=+s.T>0?+s.T:1;s.topText=String(s.topText||'');
   for(const b of s.blocks){
     if(!b.id)b.id=uid();
     if(b.v==null){b.v=+b.p||0;b.mode='rate'}delete b.p;
@@ -397,9 +402,10 @@ function renderIBD(){
     B+=`<g class="${cls.join(' ')}" data-block="${b.id}" transform="translate(${b.x},${b.y})"><rect class="body" width="${W}" height="${H}" rx="4"/>`+
       `<text class="stereo" x="8" y="13">«${esc(b.st||'part')}»</text><text class="name" x="8" y="30">${esc(b.name)}</text><text class="rate" x="8" y="46">${esc(rateText(b))}</text>`+
       (b.rep?`<text class="reptag" x="2" y="-4">≡ ${esc(b.rep)}</text>`:'')+
-      (b.ccf?`<text class="ccftag" x="${W-7}" y="13" text-anchor="end">CCF·${esc(b.ccf)}</text>`:'')+`</g>`;}
+      (b.ccf&&ccfOn()?`<text class="ccftag" x="${W-7}" y="13" text-anchor="end">CCF·${esc(b.ccf)}</text>`:'')+`</g>`;}
   $('ibdBlocks').innerHTML=B;
   $('btnConnect').classList.toggle('on',connect);
+  const fb=$('btnFrame');fb.disabled=blockSelected();fb.title=fb.disabled?'Deselect the block first: click empty canvas':'Add a labelled frame, then drag it over blocks';
   $('hint').innerHTML=connect?(pending?`<b>Connect:</b> tap the block that receives this flow`:`<b>Connect:</b> tap the source block`)
     :`<span>Drag blocks or frames to arrange; drag a frame's corner to resize it. Connections can run in any direction: the arrow shows the flow.</span><span class="legend"><svg width="26" height="6"><line x1="0" y1="3" x2="26" y2="3" stroke="var(--flow)" stroke-width="1.6"/></svg>required input</span><span class="legend"><svg width="26" height="6"><line x1="0" y1="3" x2="26" y2="3" stroke="var(--flow)" stroke-width="1.6" stroke-dasharray="6 4"/></svg>redundancy group</span>`;
 }
@@ -438,7 +444,15 @@ const end=()=>{if(drag&&drag.moved){renderResults();save()}drag=null};
 svg.addEventListener('pointerup',end);svg.addEventListener('pointercancel',end);
 
 /* ---------- inspector ---------- */
-function renderTop(){if(document.activeElement!==$('topText'))$('topText').value=S.topText;$('missionT').value=S.T}
+const ccfOn=()=>S.ccfOn!==false;
+// common-cause modelling is optional: when it's off, its controls are hidden and groups are ignored but kept
+function renderTop(){if(document.activeElement!==$('topText'))$('topText').value=S.topText;$('missionT').value=S.T;
+  const on=ccfOn(),kept=S.blocks.filter(b=>b.ccf&&!isTop(b)).length;$('ccfOn').checked=on;
+  document.querySelectorAll('[data-ccf]').forEach(el=>el.hidden=!on);
+  $('ccfOnNote').textContent=on?'Similar blocks can share a common cause, using the alpha-factor model. Turn this off for a simpler model.'
+    :kept?`Off: ${kept} block${kept>1?'s have':' has'} a common-cause group, kept but ignored until you turn this on.`:'Off: every block fails independently. Turn on to model shared causes, such as two identical IMUs.'}
+$('ccfOn').onchange=e=>{S.ccfOn=e.target.checked;renderTop();renderInsp();renderCCF();refresh(false);
+  status(S.ccfOn?'Common-cause failures on':'Common-cause failures off: groups are ignored in the results, but kept in the project')};
 function derivedLine(b){return b.mode==='prob'?'Fixed per mission, independent of mission time':`P over ${mT()} h = ${fmt(pb(b))}`}
 function repNote(b){
   if(!b.rep)return'Give blocks the same tag when they are one physical failure drawn in several places, e.g. a shared antenna. It is then counted once.';
@@ -459,7 +473,7 @@ function renderInsp(){
       <label class="f">Failure model<select id="iMode"><option value="rate"${b.mode==='rate'?' selected':''}>Constant failure rate λ</option><option value="prob"${b.mode==='prob'?' selected':''}>Fixed probability</option></select></label>
       <label class="f">${b.mode==='prob'?'Probability of failure (0 to 1)':'Failure rate λ (per hour, 0 or more)'}<input id="iV" class="mono" type="text" inputmode="decimal" value="${b.v}"></label>
       <p class="derived" id="iDer">${esc(derivedLine(b))}</p>
-      <label class="f">Common-cause group<input id="iCcf" type="text" placeholder="e.g. IMU — empty = none" value="${esc(b.ccf||'')}"></label>
+      ${!ccfOn()?'':`<label class="f">Common-cause group<input id="iCcf" type="text" placeholder="e.g. IMU — empty = none" value="${esc(b.ccf||'')}"></label>`}
       <label class="f">Shared failure event<input id="iRep" type="text" placeholder="e.g. ANT-1 — empty = own event" value="${esc(b.rep||'')}"></label>
       <p class="note" id="iRepN">${esc(repNote(b))}</p>
       <div class="row"><button id="iZero" type="button">Never fails (P = 0)</button></div>`;
@@ -473,7 +487,7 @@ function renderInsp(){
     $('iZero').onclick=()=>{b.mode='prob';b.v=0;sync();renderInsp();refresh(false)};
     $('iRep').onchange=e=>{b.rep=e.target.value.trim();const p=b.rep&&repPrimary().get(b.rep);
       if(p&&p!==b){b.mode=p.mode;b.v=p.v}renderInsp();renderCCF();refresh(false)};
-    $('iCcf').oninput=e=>{b.ccf=e.target.value.trim();renderCCF();refresh(false)};
+    if($('iCcf'))$('iCcf').oninput=e=>{b.ccf=e.target.value.trim();renderCCF();refresh(false)};
   }else if(sel&&sel.t==='l'&&S.links.find(l=>l.id===sel.id)){const l=S.links.find(l=>l.id===sel.id);
     const n=l.group?groupSize(l.to,l.group):0;
     el.innerHTML=`<h2>Connection · ${esc(m[l.from]?.name)} → ${esc(m[l.to]?.name)}</h2>
@@ -505,10 +519,10 @@ $('missionT').oninput=e=>{const v=parseFloat(e.target.value);const ok=v>0&&isFin
   if(ok){S.T=v;const d=$('iDer'),b=sel&&sel.t==='b'&&byId()[sel.id];if(d&&b)d.textContent=derivedLine(b);refresh(false)}};
 $('btnAdd').onclick=()=>{const n=S.blocks.length,id=uid();
   S.blocks.push({id,name:'Block '+n,mode:'rate',v:1e-5,x:30+(n*23)%300,y:30+(n*17)%200,st:'part',ccf:'',rep:'',kind:''});sel={t:'b',id};connect=false;pending=null;refresh(true);};
-$('btnFrame').onclick=()=>{const m=byId(),b=sel&&sel.t==='b'&&m[sel.id]&&!isTop(m[sel.id])?m[sel.id]:null,id=uid();
-  // a new frame wraps the selected block, or lands in the top-left corner
-  const f=b?{id,label:`Failure of ${b.name}`,x:clamp(b.x-16,0,CW-80),y:clamp(b.y-26,0,CH-60),w:W+32,h:H+42}
-    :{id,label:'Failure of subsystem',x:20,y:20,w:240,h:150};
+// frames are added only with no block selected, so a new frame is never tied to a component
+const blockSelected=()=>!!(sel&&sel.t==='b'&&byId()[sel.id]);
+$('btnFrame').onclick=()=>{if(blockSelected()){status('Click empty canvas to deselect the block first, then add the frame and drag it into place.',true);return}
+  const id=uid(),f={id,label:'Failure of subsystem',x:20,y:20,w:240,h:150};
   S.frames.push(f);sel={t:'f',id};connect=false;pending=null;refresh(true);status('Frame added. Drag it over blocks, or drag its corner to resize.')};
 $('btnConnect').onclick=()=>{connect=!connect;pending=null;renderIBD()};
 function delSel(){if(!sel)return;
@@ -524,7 +538,7 @@ $('btnClear').onclick=()=>{const b=$('btnClear');
     status('Click Confirm clear to remove every block, connection and frame. Save first if you want to keep your work.');return}
   clearTimeout(clearArm);clearArm=null;b.textContent='Clear';
   const top={...topNode(),name:'Top event',x:CW-W-40,y:Math.round(CH/2-H/2)};
-  S={T:S.T,ccf:{},vote:{},frames:[],blocks:[top],links:[],top:top.id,topText:top.name};
+  S={T:S.T,ccfOn:S.ccfOn,ccf:{},vote:{},frames:[],blocks:[top],links:[],top:top.id,topText:top.name};
   sel=null;connect=false;pending=null;clip=null;refresh(true);status('Canvas cleared. Add blocks and connect them to the top event.')};
 $('btnReset').onclick=()=>{S=example();sel=null;connect=false;pending=null;refresh(true);status('Example restored')};
 
@@ -572,7 +586,7 @@ function comb(n,k){let r=1;for(let i=1;i<=k;i++)r=r*(n-k+i)/i;return r}
 function defAlpha(m){const w=[];for(let k=2;k<=m;k++)w.push(1/(k-1));const s=w.reduce((a,b)=>a+b,0);return[0.95,...w.map(x=>+(0.05*x/s).toFixed(4))]}
 function repPrimary(){const r=new Map();for(const b of S.blocks)if(b.rep&&!isTop(b)&&!r.has(b.rep))r.set(b.rep,b);return r}
 const evKey=b=>b.rep?'rep:'+b.rep:b.id;
-function groupsOf(){const g=new Map(),pr=repPrimary();for(const b of S.blocks){const c=(b.ccf||'').trim();if(!c||isTop(b)||(b.rep&&pr.get(b.rep)!==b))continue;if(!g.has(c))g.set(c,[]);g.get(c).push(b)}return g}
+function groupsOf(){const g=new Map(),pr=repPrimary();if(!ccfOn())return g;for(const b of S.blocks){const c=(b.ccf||'').trim();if(!c||isTop(b)||(b.rep&&pr.get(b.rep)!==b))continue;if(!g.has(c))g.set(c,[]);g.get(c).push(b)}return g}
 function alphasFor(g,m){let a=S.ccf[g];if(!Array.isArray(a)||a.length!==m){a=defAlpha(m);S.ccf[g]=a}return a}
 function model(){
   const ev={},ccfOf=new Map(),info={},be={},pr=repPrimary();
@@ -731,15 +745,25 @@ function buildTree(M,St){
 /* ---------- fault tree drawing: layout shared by the on-page SVG and the PowerPoint export (px at 96 dpi) ---------- */
 const FT={NW:136,LH:112,PAD:16,BH:38};
 let lastTree=null;
-function layTree(root){let leaf=0,maxD=0;
-  (function lay(n,d){n.d=d;maxD=Math.max(maxD,d);if(n.k==='gate'&&n.ch.length){n.ch.forEach(c=>lay(c,d+1));n.x=(n.ch[0].x+n.ch.at(-1).x)/2}else n.x=leaf++})(root,0);
-  return{Wd:leaf*FT.NW+FT.PAD*2,Hd:(maxD+1)*FT.LH+FT.PAD}}
+// Box text wraps onto as many lines as it needs. Every box in a row takes the height of the row's tallest box,
+// so gates stay aligned; the spacing below the boxes is unchanged.
+const LINE=13;
+function wrapAll(t,n){const L=[];let c='';
+  for(let x of String(t).split(/\s+/).filter(Boolean)){while(x.length>n){if(c){L.push(c);c=''}L.push(x.slice(0,n-1)+'-');x=x.slice(n-1)}
+    if((c+' '+x).trim().length>n&&c){L.push(c);c=x}else c=(c+' '+x).trim()}
+  if(c)L.push(c);return L.length?L:['']}
+function layTree(root){let leaf=0;const rows=[];
+  (function lay(n,d){n.d=d;n.lines=wrapAll(n.label,20);rows[d]=Math.max(rows[d]||0,FT.BH,n.lines.length*LINE+12);
+    if(n.k==='gate'&&n.ch.length){n.ch.forEach(c=>lay(c,d+1));n.x=(n.ch[0].x+n.ch.at(-1).x)/2}else n.x=leaf++})(root,0);
+  const top=[FT.PAD];rows.forEach((h,d)=>top[d+1]=top[d]+h+FT.LH-FT.BH);
+  (function pos(n){n.y=top[n.d];n.bh=rows[n.d];n.ym=top[n.d+1]-14;(n.ch||[]).forEach(pos)})(root);
+  return{Wd:leaf*FT.NW+FT.PAD*2,Hd:top[rows.length]}}
 // Transfers: the full branch and each △ pointing to it share a label T1, T2… numbered in drawing order
 function tagTransfers(root,key){const want=new Set(),ids=new Map();
   (function w(n){if(n.k==='xfer')want.add(key(n));else(n.ch||[]).forEach(w)})(root);
   (function w(n){if(n.k==='gate'){const k=key(n);if(k!=null&&want.has(k)&&!ids.has(k)){ids.set(k,'T'+(ids.size+1));n.tid=ids.get(k)}n.ch.forEach(w)}})(root);
   (function w(n){if(n.k==='xfer')n.tid=ids.get(key(n));else(n.ch||[]).forEach(w)})(root)}
-const ftX=n=>FT.PAD+n.x*FT.NW+FT.NW/2,ftY=n=>FT.PAD+n.d*FT.LH;
+const ftX=n=>FT.PAD+n.x*FT.NW+FT.NW/2,ftY=n=>n.y;
 function drawTree(spf,M,St){
   const T=buildTree(M,St),root=T.root,ft=$('ft');
   if(!root){lastTree=null;ft.setAttribute('viewBox','0 0 420 60');ft.style.maxWidth='420px';ft.style.aspectRatio='7';ft.dataset.w=420;ft.dataset.h=60;
@@ -747,18 +771,18 @@ function drawTree(spf,M,St){
   tagTransfers(root,n=>n.bid);
   const{Wd,Hd}=layTree(root);let o='';
   (function dr(n){const x=ftX(n),y=ftY(n),bw=FT.NW-14,s=n.k==='basic'&&spf.has(n.id),z=n.k==='basic'&&!(n.p>0);
-    const lines=wrap(n.label,20);
-    o+=`<g${z?' class="ft-zero"':''}><title>${esc(n.label)}${n.sub&&n.sub!==n.label?' ('+esc(n.sub)+')':''}${n.p!=null?' · P = '+fmt(n.p):''}${n.rep?` · repeated ${n.rep}× in this tree, counted once`:''}</title><rect class="ft-box${n.top?' top':''}${s?' spf':''}${n.frame&&!n.top?' frm':''}" x="${x-bw/2}" y="${y}" width="${bw}" height="${FT.BH}" rx="3"/>`;
-    lines.forEach((t,i)=>o+=`<text class="ft-txt${n.top?' b':''}" x="${x}" y="${y+(lines.length===1?23:16+i*13)}" text-anchor="middle">${esc(t)}</text>`);
+    const lines=n.lines,ty=y+(n.bh-lines.length*LINE)/2+10;
+    o+=`<g${z?' class="ft-zero"':''}><title>${esc(n.label)}${n.sub&&n.sub!==n.label?' ('+esc(n.sub)+')':''}${n.p!=null?' · P = '+fmt(n.p):''}${n.rep?` · repeated ${n.rep}× in this tree, counted once`:''}</title><rect class="ft-box${n.top?' top':''}${s?' spf':''}${n.frame&&!n.top?' frm':''}" x="${x-bw/2}" y="${y}" width="${bw}" height="${n.bh}" rx="3"/>`;
+    lines.forEach((t,i)=>o+=`<text class="ft-txt${n.top?' b':''}" x="${x}" y="${ty+i*LINE}" text-anchor="middle">${esc(t)}</text>`);
     if(n.tid&&n.k==='gate')o+=`<text class="ft-tid" x="${x+bw/2}" y="${y-4}" text-anchor="end">${n.tid}<title>Transfer ${n.tid}: drawn in full here, and as △ ${n.tid} elsewhere</title></text>`;
-    const y0=y+42;o+=`<line class="ft-wire" x1="${x}" y1="${y+FT.BH}" x2="${x}" y2="${y0}"/>`;
+    const y0=y+n.bh+4;o+=`<line class="ft-wire" x1="${x}" y1="${y+n.bh}" x2="${x}" y2="${y0}"/>`;
     if(n.k==='gate'){
       o+=n.g!=='AND'?`<path class="ft-gate" d="M${x-15},${y0+24} Q${x-15},${y0+7} ${x},${y0} Q${x+15},${y0+7} ${x+15},${y0+24} Q${x},${y0+16} ${x-15},${y0+24}Z"/>`
         :`<path class="ft-gate" d="M${x-14},${y0+24} L${x-14},${y0+11} A14 11 0 0 1 ${x+14},${y0+11} L${x+14},${y0+24}Z"/>`;
       o+=`<text class="ft-gname" x="${x}" y="${y0+19}" text-anchor="middle">${n.g==='VOTE'?n.vk+'/'+n.vn:n.g}</text>`;
       if(n.p!=null)o+=`<text class="ft-gp" x="${x+19}" y="${y0+14}">${fmt(n.p)}</text>`;
       o+='</g>';
-      const yb=n.g!=='AND'?y0+20:y0+24,ym=y+FT.LH-14;
+      const yb=n.g!=='AND'?y0+20:y0+24,ym=n.ym;
       for(const c of n.ch){const xc=ftX(c);o+=`<path class="ft-wire" d="M${x},${yb} V${ym} H${xc} V${ftY(c)}"/>`;dr(c)}
     }else if(n.k==='basic'){
       o+=`<circle class="ft-basic${n.ccf?' ccf':''}${s?' spf':''}${n.rep?' rep':''}" cx="${x}" cy="${y0+12}" r="12"/><text class="ft-p" x="${x}" y="${y0+40}" text-anchor="middle">${fmt(n.p)}</text>`+
@@ -816,7 +840,7 @@ async function ibdPptx(){
       {text:rateText(b),options:{fontFace:MONO,fontSize:pt(10.5),color:C.muted}}],
       {shape:SH_.rect,x:X(b.x),y:Y(b.y),w:u(W),h:u(H),align:'left',valign:'middle',margin:pt(6),fill:{color:C.white},line:{color:C.line,width:Math.max(.5,1.2*.75*k)}});
     if(b.rep)slide.addText('≡ '+b.rep,{x:X(b.x+2),y:Y(b.y-15),w:u(W-40),h:u(12),fontFace:MONO,fontSize:pt(9.5),bold:true,color:C.flow,align:'left',valign:'middle',margin:0});
-    if(b.ccf)slide.addText('CCF·'+b.ccf,{x:X(b.x+W-70),y:Y(b.y+3),w:u(64),h:u(12),fontFace:MONO,fontSize:pt(9.5),bold:true,color:C.flow,align:'right',valign:'middle',margin:0});}
+    if(b.ccf&&ccfOn())slide.addText('CCF·'+b.ccf,{x:X(b.x+W-70),y:Y(b.y+3),w:u(64),h:u(12),fontFace:MONO,fontSize:pt(9.5),bold:true,color:C.flow,align:'right',valign:'middle',margin:0});}
   slide.addNotes('Generated by Fault Tree Workbench. Blocks, frames, connections (with arrowheads), ports and flow labels are separate editable shapes. Dashed connections are redundancy groups; k/n on a label means the group is lost when k of its n inputs are lost. ≡ TAG above a block marks a shared failure event (blocks with the same tag are one physical failure). Dashed frames group blocks under a labelled event in the fault tree.');
   return pres.write({outputType:'arraybuffer'});
 }
@@ -837,10 +861,10 @@ async function ftPptx(){
   const txt=(t,x,y,w,h,o)=>slide.addText(t,Object.assign({x:X(x),y:Y(y),w:u(w),h:u(h),fontFace:F,margin:0,align:'center',valign:'middle'},o));
   const stroke=w=>Math.max(.5,w*.75*k);
   (function dr(n){const x=ftX(n),y=ftY(n),bw=FT.NW-14,s=n.k==='basic'&&L.spf.has(n.id),z=n.k==='basic'&&!(n.p>0),tr=z?50:0,fr=n.frame&&!n.top;
-    slide.addText(wrap(n.label,20).join('\n'),{shape:SH_.rect,x:X(x-bw/2),y:Y(y),w:u(bw),h:u(FT.BH),fontFace:F,fontSize:pt(11),bold:!!n.top,color:C.ink,align:'center',valign:'middle',margin:0,
+    slide.addText(n.lines.join('\n'),{shape:SH_.rect,x:X(x-bw/2),y:Y(y),w:u(bw),h:u(n.bh),fontFace:F,fontSize:pt(11),bold:!!n.top,color:C.ink,align:'center',valign:'middle',margin:0,
       fill:{color:n.top?C.accentSoft:s?C.critSoft:fr?C.flowSoft:C.white,transparency:tr},line:{color:n.top?C.accent:s?C.crit:fr?C.flow:C.line,width:stroke(n.top?2:s?1.6:fr?1.5:1),transparency:tr}});
     if(n.tid&&n.k==='gate')txt(n.tid,x+bw/2-40,y-15,40,12,{fontSize:pt(10),bold:true,color:C.flow,align:'right',fontFace:'Courier New'});
-    const y0=y+42;wire(x,y+FT.BH,x,y0);
+    const y0=y+n.bh+4;wire(x,y+n.bh,x,y0);
     if(n.k==='gate'){
       const sx=u(1),pts=n.g!=='AND'
         ?[{x:0,y:24},{x:15,y:0,curve:{type:'quadratic',x1:0,y1:7}},{x:30,y:24,curve:{type:'quadratic',x1:30,y1:7}},{x:0,y:24,curve:{type:'quadratic',x1:15,y1:16}},{close:true}]
@@ -850,7 +874,7 @@ async function ftPptx(){
         {x1:q.curve.x1*sx,y1:q.curve.y1*sx},q.curve.x2!=null?{x2:q.curve.x2*sx,y2:q.curve.y2*sx}:{})}:{})),fill:{color:C.white},line:{color:C.ink,width:stroke(1.3)}});
       txt(n.g==='VOTE'?n.vk+'/'+n.vn:n.g,x-15,y0+11,30,11,{fontSize:pt(8.5),bold:true,color:C.ink,fontFace:'Courier New'});
       if(n.p!=null)txt(fmt(n.p),x+18,y0+6,52,12,{fontSize:pt(10),color:C.accent,align:'left',fontFace:'Courier New'});
-      const yb=n.g!=='AND'?y0+20:y0+24,ym=y+FT.LH-14;
+      const yb=n.g!=='AND'?y0+20:y0+24,ym=n.ym;
       for(const c of n.ch){const xc=ftX(c);wire(x,yb,x,ym);wire(x,ym,xc,ym);wire(xc,ym,xc,ftY(c));dr(c)}
     }else if(n.k==='basic'){
       slide.addShape(SH_.ellipse,{x:X(x-12),y:Y(y0),w:u(24),h:u(24),fill:{color:s?C.critSoft:C.white,transparency:tr},
@@ -883,7 +907,7 @@ function renderResults(){
     el.innerHTML=`Q<sub>t</sub> ${fmt(i.Qt)} · `+i.Q.map((q,k)=>`Q<sub>${k+1}</sub> ${fmt(q)}`).join(' · ')+
       (Math.abs(i.sum-1)>1e-6?`<br><span class="w">α values sum to ${i.sum.toFixed(3)}; normalised to 1</span>`:'');});
 }
-function renderCCF(){
+function renderCCF(){if(!ccfOn()){$('ccfSect').innerHTML='';return}
   const G=groupsOf();let h='<h2>Common-cause groups · alpha factor</h2>',gi=0;
   if(!G.size)h+='<p class="empty">Give two or more similar blocks the same common-cause group name to model shared failures.</p>';
   for(const[g,mem]of G){const n=mem.length;gi++;
@@ -896,7 +920,7 @@ function renderCCF(){
   if(G.size)h+='<p class="note">α<sub>k</sub> is the fraction of failures that hit exactly k members at once. Q<sub>k</sub> is the probability of each specific k-member event.</p>';
   $('ccfSect').innerHTML=h;
 }
-$('ccfSect').addEventListener('input',e=>{const t=e.target;if(t.dataset.g==null)return;
+$('ccfSect')?.addEventListener('input',e=>{const t=e.target;if(t.dataset.g==null)return;
   const v=parseFloat(t.value),ok=v>=0&&v<=1;t.classList.toggle('bad',!ok);if(!ok)return;
   S.ccf[t.dataset.g][+t.dataset.k]=v;refresh(false)});
 

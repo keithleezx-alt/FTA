@@ -35,7 +35,16 @@ It's meant for early design trade studies and for teaching model-based safety an
 
 To start from scratch, click **Clear**, then **Confirm clear**.
 
-Your work is saved automatically in your browser. Use **Save .json** to keep a copy you can move between machines or share.
+### Turning common-cause failures on or off
+
+Common-cause failures (CCF) are optional. Use the **Model common-cause failures** checkbox in the Top event panel:
+
+- **Off:** every block fails independently. The common-cause group field, the alpha-factor panel, the CCF tags and the CCF notes are hidden. This is the simpler model to start with.
+- **On:** blocks with the same common-cause group can fail together, using the alpha-factor model (see [Common-cause failures](#common-cause-failures-alpha-factor-model)).
+
+Turning it off doesn't delete anything. Groups and alpha values are kept, ignored in the results, and used again when you turn it back on. The panel says how many blocks still have a group. The setting is saved with the project and can be undone like any other change.
+
+New projects without common-cause groups start with it off. Projects that already have groups, including the example, start with it on, so their results don't change.
 
 ---
 
@@ -77,7 +86,7 @@ The workbench needs four inputs to produce a fault tree. An IBD alone isn't enou
 | Button | Action |
 |---|---|
 | **+ Block** | Add a block. |
-| **+ Frame** | Add a labelled frame. With a block selected, the frame wraps that block; otherwise it appears in the top-left corner. See [Frames](#frames). |
+| **+ Frame** | Add a labelled frame in the top-left corner, then drag it over the blocks it should group. The button only works when no block is selected, so a new frame is never tied to one component; click empty canvas to deselect first. See [Frames](#frames). |
 | **Connect** | Draw a connection: tap the source, then the target. The top-event node can only be a target. |
 | **Copy** / **Paste** | Copy the selected block, or a selected frame together with the blocks inside it and the connections between them, then paste a copy offset from the original. **Ctrl+C** / **Ctrl+V** (**⌘C** / **⌘V** on a Mac) work too. Pasting again places further copies. |
 | **Delete** | Delete the selected block (and its connections), connection or frame. Deleting a frame keeps its blocks. The top-event node can't be deleted. The **Delete** or **Backspace** key does the same. **Ctrl+X** (**⌘X** on a Mac) cuts instead: it copies the selection, then deletes it, and the next **Ctrl+V** puts it back in place. Cutting a frame removes its blocks too. |
@@ -98,7 +107,7 @@ Drag blocks or frames to move them; moving a frame moves the blocks inside it. D
 | **Stereotype** | Free text shown as «stereotype», e.g. `sensor`, `power`. |
 | **Failure model** | *Constant failure rate λ* (per hour) or *Fixed probability* (per mission). Switching converts the value so the probability stays the same. |
 | **Value** | λ ≥ 0, or a probability from 0 to 1. The line below shows the resulting mission probability. |
-| **Common-cause group** | Blocks with the same name form a CCF group. Leave empty for none. |
+| **Common-cause group** | Blocks with the same name form a CCF group. Leave empty for none. Shown only when **Model common-cause failures** is on. |
 | **Shared failure event** | Blocks with the same tag are **one physical failure** drawn in several places. They share a single basic event that is counted once. Setting a tag that's already in use copies that block's failure data, and later edits stay in sync. The tag is shown as `≡ TAG` above the block. Leave empty for a block that is its own component. See [Modelling shared components](#modelling-shared-components). |
 | **Never fails (P = 0)** | Sets a fixed probability of 0. The block stays in the diagram and tree (dimmed) but never causes a failure itself. |
 
@@ -125,6 +134,7 @@ The top event is the rounded **TOP EVENT** node on the diagram. It isn't a compo
 |---|---|
 | **Undesired event** | The label at the top of the fault tree and on the node. |
 | **Mission time (hours)** | Used to convert failure rates to probabilities. |
+| **Model common-cause failures** | Shows the common-cause controls and includes the groups in the results. See [Turning common-cause failures on or off](#turning-common-cause-failures-on-or-off). |
 
 Projects saved before the top-event node existed picked a block as the top event. When you load one, a top-event node is added next to that block and connected to it, so the results are unchanged. The block's own failure stays in the tree as a basic event.
 
@@ -153,7 +163,7 @@ Lists each CCF group with editable **α₁ … αₘ** values (m = number of mem
 | **Occurs about once in** | 1 / P missions. |
 | **Minimal cut sets** | Count of the smallest event combinations that cause the top event. |
 | **Single-point failures** | Events that cause the top event on their own. |
-| **Generated fault tree** | The top event at the top, then OR/AND gates, voting gates (OR shape marked `k/n`), basic events (circles) and transfer symbols (△) where a subtree is reused. A branch that's needed in several places is drawn in full once and tagged **T1**, **T2**…; every other place shows a △ with the same label instead of repeating it. It's one event, counted once. Every gate shows its exact probability. Blue boxes are frame labels. Repeated basic events are drawn with a heavier circle and an `R×n` tag. Red = single-point failure; dashed circle = common-cause event; dimmed = probability 0. |
+| **Generated fault tree** | Boxes grow taller to fit long descriptions, and every box in a row matches the tallest one so the gates stay aligned. The top event at the top, then OR/AND gates, voting gates (OR shape marked `k/n`), basic events (circles) and transfer symbols (△) where a subtree is reused. A branch that's needed in several places is drawn in full once and tagged **T1**, **T2**…; every other place shows a △ with the same label instead of repeating it. It's one event, counted once. Every gate shows its exact probability. Blue boxes are frame labels. Repeated basic events are drawn with a heavier circle and an `R×n` tag. Red = single-point failure; dashed circle = common-cause event; dimmed = probability 0. |
 | **Minimal cut sets table** | Each set with its order (SPF, CCF, ×2, ×3…), probability and share of the total. |
 | **Component importance** | Fussell–Vesely: the share of P(top) that disappears if the event can't occur. |
 
@@ -337,6 +347,7 @@ The current project is kept in your browser automatically (key `ft-workbench-v2`
   "top": "thrust",
   "topText": "Loss of thrust",
   "T": 1,
+  "ccfOn": true,
   "ccf": { "IMU": [0.95, 0.05] },
   "vote": { "thrust|Rotors": 2 },
   "blocks": [
@@ -358,6 +369,7 @@ The current project is kept in your browser automatically (key `ft-workbench-v2`
 | `top` | string | Id of the top-event node. |
 | `topText` | string | Top event label (the same as the top-event node's name). |
 | `T` | number > 0 | Mission time in hours. |
+| `ccfOn` | boolean | Whether common-cause groups are modelled. Missing = on if any block has a group. |
 | `ccf` | object | CCF group name → array of alpha values α₁ … αₘ. |
 | `vote` | object | `"<target block id>|<redundancy group>"` → k, the number of lost inputs that loses the group. Missing = all (n). |
 | `blocks[].id` | string | Unique id. |

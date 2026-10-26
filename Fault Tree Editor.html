@@ -37,6 +37,7 @@ h2{font-family:var(--f-display);font-weight:600;font-size:13px;letter-spacing:.0
 .toolbar{display:flex;flex-wrap:wrap;gap:6px}
 button{font:500 13px/1 var(--f-body);color:var(--ink);background:var(--surface);border:1px solid var(--line-strong);border-radius:4px;padding:8px 11px;cursor:pointer}
 button:hover{background:var(--sunk)}
+button:disabled{opacity:.45;cursor:not-allowed;background:var(--surface)}
 button.on{background:var(--accent);border-color:var(--accent);color:var(--surface)}
 button.danger{color:var(--critical);border-color:var(--critical)}
 button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
@@ -378,7 +379,7 @@ function tagTransfers(root,key){const want=new Set(),ids=new Map();
   (function w(n){if(n.k==='xfer')want.add(key(n));else(n.ch||[]).forEach(w)})(root);
   (function w(n){if(n.k==='gate'){const k=key(n);if(k!=null&&want.has(k)&&!ids.has(k)){ids.set(k,'T'+(ids.size+1));n.tid=ids.get(k)}n.ch.forEach(w)}})(root);
   (function w(n){if(n.k==='xfer')n.tid=ids.get(key(n));else(n.ch||[]).forEach(w)})(root)}
-const ftX=n=>FT.PAD+n.x*FT.NW+FT.NW/2,ftY=n=>FT.PAD+n.d*FT.LH;
+const ftX=n=>FT.PAD+n.x*FT.NW+FT.NW/2,ftY=n=>n.y;
 let drawn=[],lastTree=null;
 function buildTree(A){
   const seen=new Set(),cnt=new Map(),nodes=[];
@@ -392,28 +393,38 @@ function buildTree(A){
   const root=node({t:'g',n:E.top},null,-1);
   for(const n of nodes)if(n.k==='basic'&&cnt.get(n.name)>1)n.rep=cnt.get(n.name);
   return{root,nodes,repeated:[...cnt].filter(([,c])=>c>1).map(([n])=>n)}}
-function layTree(root){let leaf=0,maxD=0;
-  (function lay(n,d){n.d=d;maxD=Math.max(maxD,d);if(n.k==='gate'&&n.ch.length){n.ch.forEach(c=>lay(c,d+1));n.x=(n.ch[0].x+n.ch.at(-1).x)/2}else n.x=leaf++})(root,0);
-  return{Wd:leaf*FT.NW+FT.PAD*2,Hd:(maxD+1)*FT.LH+FT.PAD}}
+// Box text wraps onto as many lines as it needs. Every box in a row takes the height of the row's tallest box,
+// so gates stay aligned; the spacing below the boxes is unchanged.
+const LINE=13;
+function wrapAll(t,n){const L=[];let c='';
+  for(let x of String(t).split(/\s+/).filter(Boolean)){while(x.length>n){if(c){L.push(c);c=''}L.push(x.slice(0,n-1)+'-');x=x.slice(n-1)}
+    if((c+' '+x).trim().length>n&&c){L.push(c);c=x}else c=(c+' '+x).trim()}
+  if(c)L.push(c);return L.length?L:['']}
+function layTree(root){let leaf=0;const rows=[];
+  (function lay(n,d){n.d=d;n.lines=wrapAll(n.label,20);rows[d]=Math.max(rows[d]||0,FT.BH,n.lines.length*LINE+12);
+    if(n.k==='gate'&&n.ch.length){n.ch.forEach(c=>lay(c,d+1));n.x=(n.ch[0].x+n.ch.at(-1).x)/2}else n.x=leaf++})(root,0);
+  const top=[FT.PAD];rows.forEach((h,d)=>top[d+1]=top[d]+h+FT.LH-FT.BH);
+  (function pos(n){n.y=top[n.d];n.bh=rows[n.d];n.ym=top[n.d+1]-14;(n.ch||[]).forEach(pos)})(root);
+  return{Wd:leaf*FT.NW+FT.PAD*2,Hd:top[rows.length]}}
 const isSel=n=>sel&&sel.name===n.name&&sel.parent===n.parent&&sel.idx===n.idx;
 function drawTree(A){
   const T=buildTree(A),root=T.root,ft=$('ft');drawn=T.nodes;
   tagTransfers(root,n=>n.name);
   const{Wd,Hd}=layTree(root);let o='';
   (function dr(n){const x=ftX(n),y=ftY(n),bw=FT.NW-14,s=n.k==='basic'&&A.spf.has(n.name),z=n.k==='basic'&&!(n.p>0),em=n.k==='gate'&&!n.ch.length;
-    const lines=wrap(n.label,20);
+    const lines=n.lines,ty=y+(n.bh-lines.length*LINE)/2+10;
     o+=`<g class="nd${isSel(n)?' sel':''}${z?' ft-zero':''}" data-i="${n.i}"><title>${esc(n.label)} · ${esc(n.name)}${n.p!=null?' · P = '+fmt(n.p):''}${n.rep?` · repeated ${n.rep}×, counted once`:''}${em?' · empty gate: add inputs':''}</title>`+
-      `<rect class="ft-box${n.top?' top':''}${s?' spf':''}${n.frame&&!n.top?' frm':''}${em?' empty':''}" x="${x-bw/2}" y="${y}" width="${bw}" height="${FT.BH}" rx="3"/>`;
-    lines.forEach((t,i)=>o+=`<text class="ft-txt${n.top?' b':''}" x="${x}" y="${y+(lines.length===1?23:16+i*13)}" text-anchor="middle">${esc(t)}</text>`);
+      `<rect class="ft-box${n.top?' top':''}${s?' spf':''}${n.frame&&!n.top?' frm':''}${em?' empty':''}" x="${x-bw/2}" y="${y}" width="${bw}" height="${n.bh}" rx="3"/>`;
+    lines.forEach((t,i)=>o+=`<text class="ft-txt${n.top?' b':''}" x="${x}" y="${ty+i*LINE}" text-anchor="middle">${esc(t)}</text>`);
     if(n.tid&&n.k==='gate')o+=`<text class="ft-tid" x="${x+bw/2}" y="${y-4}" text-anchor="end">${n.tid}<title>Transfer ${n.tid}: drawn in full here, and as △ ${n.tid} elsewhere</title></text>`;
-    const y0=y+42;o+=`<line class="ft-wire" x1="${x}" y1="${y+FT.BH}" x2="${x}" y2="${y0}"/>`;
+    const y0=y+n.bh+4;o+=`<line class="ft-wire" x1="${x}" y1="${y+n.bh}" x2="${x}" y2="${y0}"/>`;
     if(n.k==='gate'){
       o+=n.g!=='AND'?`<path class="ft-gate" d="M${x-15},${y0+24} Q${x-15},${y0+7} ${x},${y0} Q${x+15},${y0+7} ${x+15},${y0+24} Q${x},${y0+16} ${x-15},${y0+24}Z"/>`
         :`<path class="ft-gate" d="M${x-14},${y0+24} L${x-14},${y0+11} A14 11 0 0 1 ${x+14},${y0+11} L${x+14},${y0+24}Z"/>`;
       o+=`<text class="ft-gname" x="${x}" y="${y0+19}" text-anchor="middle">${n.g==='VOTE'?n.vk+'/'+n.vn:n.g}</text>`;
       if(n.p!=null)o+=`<text class="ft-gp" x="${x+19}" y="${y0+14}">${fmt(n.p)}</text>`;
       o+='</g>';
-      const yb=n.g!=='AND'?y0+20:y0+24,ym=y+FT.LH-14;
+      const yb=n.g!=='AND'?y0+20:y0+24,ym=n.ym;
       for(const c of n.ch){const xc=ftX(c);o+=`<path class="ft-wire" d="M${x},${yb} V${ym} H${xc} V${ftY(c)}"/>`;dr(c)}
     }else if(n.k==='basic'){
       o+=`<circle class="ft-basic${n.ccf?' ccf':''}${s?' spf':''}${n.rep?' rep':''}" cx="${x}" cy="${y0+12}" r="12"/><text class="ft-p" x="${x}" y="${y0+40}" text-anchor="middle">${fmt(n.p)}</text>`+
@@ -589,10 +600,10 @@ async function ftPptx(){
   const txt=(t,x,y,w,h,o)=>slide.addText(t,Object.assign({x:X(x),y:Y(y),w:u(w),h:u(h),fontFace:F,margin:0,align:'center',valign:'middle'},o));
   const stroke=w=>Math.max(.5,w*.75*k);
   (function dr(n){const x=ftX(n),y=ftY(n),bw=FT.NW-14,s=n.k==='basic'&&L.spf.has(n.name),z=n.k==='basic'&&!(n.p>0),tr=z?50:0,fr=n.frame&&!n.top;
-    slide.addText(wrap(n.label,20).join('\n'),{shape:SH_.rect,x:X(x-bw/2),y:Y(y),w:u(bw),h:u(FT.BH),fontFace:F,fontSize:pt(11),bold:!!n.top,color:C.ink,align:'center',valign:'middle',margin:0,
+    slide.addText(n.lines.join('\n'),{shape:SH_.rect,x:X(x-bw/2),y:Y(y),w:u(bw),h:u(n.bh),fontFace:F,fontSize:pt(11),bold:!!n.top,color:C.ink,align:'center',valign:'middle',margin:0,
       fill:{color:n.top?C.accentSoft:s?C.critSoft:fr?C.flowSoft:C.white,transparency:tr},line:{color:n.top?C.accent:s?C.crit:fr?C.flow:C.line,width:stroke(n.top?2:s?1.6:fr?1.5:1),transparency:tr}});
     if(n.tid&&n.k==='gate')txt(n.tid,x+bw/2-40,y-15,40,12,{fontSize:pt(10),bold:true,color:C.flow,align:'right',fontFace:'Courier New'});
-    const y0=y+42;wire(x,y+FT.BH,x,y0);
+    const y0=y+n.bh+4;wire(x,y+n.bh,x,y0);
     if(n.k==='gate'){
       const sx=u(1),pts=n.g!=='AND'
         ?[{x:0,y:24},{x:15,y:0,curve:{type:'quadratic',x1:0,y1:7}},{x:30,y:24,curve:{type:'quadratic',x1:30,y1:7}},{x:0,y:24,curve:{type:'quadratic',x1:15,y1:16}},{close:true}]
@@ -602,7 +613,7 @@ async function ftPptx(){
         {x1:q.curve.x1*sx,y1:q.curve.y1*sx},q.curve.x2!=null?{x2:q.curve.x2*sx,y2:q.curve.y2*sx}:{})}:{})),fill:{color:C.white},line:{color:C.ink,width:stroke(1.3)}});
       txt(n.g==='VOTE'?n.vk+'/'+n.vn:n.g,x-15,y0+11,30,11,{fontSize:pt(8.5),bold:true,color:C.ink,fontFace:'Courier New'});
       if(n.p!=null)txt(fmt(n.p),x+18,y0+6,52,12,{fontSize:pt(10),color:C.accent,align:'left',fontFace:'Courier New'});
-      const yb=n.g!=='AND'?y0+20:y0+24,ym=y+FT.LH-14;
+      const yb=n.g!=='AND'?y0+20:y0+24,ym=n.ym;
       for(const c of n.ch){const xc=ftX(c);wire(x,yb,x,ym);wire(x,ym,xc,ym);wire(xc,ym,xc,ftY(c));dr(c)}
     }else if(n.k==='basic'){
       slide.addShape(SH_.ellipse,{x:X(x-12),y:Y(y0),w:u(24),h:u(24),fill:{color:s?C.critSoft:C.white,transparency:tr},
