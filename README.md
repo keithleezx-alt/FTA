@@ -1,9 +1,8 @@
-# Fault Tree Workbench
+# Architecture Workbench
 
-Two single-page tools for fault tree analysis:
+A single-page tool for fault tree analysis from a system architecture. You draw the system as it really is: blocks, flows in one or both directions, and frames for subsystems. Then you define one or more **analyses**, each naming an undesired event and the blocks whose loss causes it. The page generates the fault tree, minimal cut sets, exact probabilities and component importance for the analysis you select, and updates them as you edit. The diagram itself stays neutral.
 
-- **Fault Tree Workbench** (`Fault Tree Workbench.html`) turns an Internal Block Diagram (IBD) into a fault tree. You draw the architecture as blocks and one-way connections, give each block failure data, mark redundancy and common-cause groups, group blocks in labelled frames, and connect the blocks whose loss causes the top event. The page then generates the fault tree, the minimal cut sets, the top-event probability and component importance, and updates them all as you edit.
-- **Fault Tree Editor** (`Fault Tree Editor.html`) opens a fault tree saved as Open-PSA XML, from the workbench or another tool, and lets you edit the tree itself: probabilities, events, gates and grouping. See [Fault Tree Editor](#fault-tree-editor).
+Open `Architecture Workbench.html` in a browser; nothing needs installing. A companion page, `Fault Tree Editor.html`, opens the fault trees it exports so you can edit a tree directly (see [Fault Tree Editor](#fault-tree-editor)).
 
 It's meant for early design trade studies and for teaching model-based safety analysis. It is **not** a certified safety tool (see [Limitations](#limitations)).
 
@@ -13,105 +12,129 @@ It's meant for early design trade studies and for teaching model-based safety an
 
 1. [Quick start](#quick-start)
 2. [Concepts](#concepts)
-3. [Using the workbench](#using-the-workbench)
-4. [How the analysis works](#how-the-analysis-works)
-5. [Import and export](#import-and-export)
-6. [Project file format](#project-file-format)
-7. [Getting failure data](#getting-failure-data)
-8. [Fault Tree Editor](#fault-tree-editor)
-9. [Limitations](#limitations)
-10. [References](#references)
+3. [Drawing the architecture](#drawing-the-architecture)
+4. [Analyses](#analyses)
+5. [Results](#results)
+6. [How the analysis works](#how-the-analysis-works)
+7. [Modelling guidance](#modelling-guidance)
+8. [Worked examples](#worked-examples)
+9. [Import and export](#import-and-export)
+10. [Project file format](#project-file-format)
+11. [Getting failure data](#getting-failure-data)
+12. [Fault Tree Editor](#fault-tree-editor)
+13. [Limitations](#limitations)
+14. [References](#references)
 
 ---
 
 ## Quick start
 
-1. Open the workbench. It loads an example hexacopter (battery → PDB → dual IMU, dual GNSS → flight controller → 6-in-1 ESC → six motors → the top event *Loss of thrust*, which occurs when 2 of the 6 motors are lost) with **fake** failure rates. The IMUs and the GNSS receivers sit in labelled frames.
-2. Click a block to edit its name, failure model and value in the right-hand panel.
-3. Click **Connect**, tap a source block, then tap the block that receives the flow. Connections can run in any direction.
-4. Click a connection to set its flow label and, for backup inputs, a **redundancy group**.
-5. Connect the blocks whose loss causes the top event to the **TOP EVENT** node, name the undesired event and set the **mission time**.
-6. Read the results below the diagram: top-event probability, single-point failures, the fault tree, minimal cut sets and importance ranking.
+1. **Open the page.** It loads an example hexacopter with **fake** failure rates: battery → PDB → dual IMU and dual GNSS → flight controller ↔ 6-in-1 ESC → six motors. The flight controller and ESC exchange PWM and telemetry over a two-way connection, and the sensors sit in labelled frames.
+2. **Draw or edit the architecture.** Click a block to set its name and failure data in the editor under the canvas. Click **Connect**, tap a source block, then tap the block that receives the flow.
+3. **Set connection logic.** Click a connection to set its flow label, mark backup inputs with a **redundancy group**, or make it **two-way** and say what each end needs.
+4. **Define an analysis.** In the **Analysis** panel, name the undesired event, choose **any**, **all** or **at least k**, and add the blocks whose loss causes it. You can add them from the list or with **Pick on diagram**.
+5. **Read the results** below the diagram: probability, single-point failures, the fault tree, minimal cut sets and importance.
+6. **Ask more questions of the same diagram** with **+ New analysis**. Switch between analyses with **Showing**.
 
 To start from scratch, click **Clear**, then **Confirm clear**.
-
-### Turning common-cause failures on or off
-
-Common-cause failures (CCF) are optional. Use the **Model common-cause failures** checkbox in the Top event panel:
-
-- **Off:** every block fails independently. The common-cause group field, the alpha-factor panel, the CCF tags and the CCF notes are hidden. This is the simpler model to start with.
-- **On:** blocks with the same common-cause group can fail together, using the alpha-factor model (see [Common-cause failures](#common-cause-failures-alpha-factor-model)).
-
-Turning it off doesn't delete anything. Groups and alpha values are kept, ignored in the results, and used again when you turn it back on. The panel says how many blocks still have a group. The setting is saved with the project and can be undone like any other change.
-
-New projects without common-cause groups start with it off. Projects that already have groups, including the example, start with it on, so their results don't change.
 
 ---
 
 ## Concepts
 
-The workbench needs four inputs to produce a fault tree. An IBD alone isn't enough.
-
 | Input | Where you set it | What it means |
 |---|---|---|
-| **Architecture** | IBD canvas | Blocks and the one-way flows between them. An arrow from A to B means B needs A's output, whichever way it points on the canvas. |
-| **Failure data** | Block inspector | Each block's chance of failing on its own, as a constant rate λ or a fixed probability. |
-| **Failure logic** | Connection inspector | Inputs are *required* by default. Inputs into the same block that share a redundancy group back each other up, and the group is lost when at least k of its n inputs are lost (k-of-n). |
-| **Top event** | TOP EVENT node | The system-level failure the tree is built for. It's a node of its own, not a component: the blocks connected to it define when it occurs. |
+| **Architecture** | Canvas | Blocks and the flows between them. A one-way arrow from A to B means B needs A's output, whichever way it points on the canvas. A two-way connection says separately what each end needs. |
+| **Failure data** | Block panel | Each block's chance of failing on its own, as a constant rate λ or a fixed probability. |
+| **Failure logic** | Connection panel | Inputs are *required* by default. Inputs into the same block that share a **redundancy group** back each other up; the group is lost when at least k of its n inputs are lost (k-of-n). |
+| **Analysis** | Analysis panel | The undesired event at the top of the tree, and which blocks must be lost for it to happen. A project can have several. |
 
-**Frames** add context: a labelled frame around blocks becomes an intermediate event in the tree, such as *Failure of primary GNSS*, without changing any probability.
+Three optional layers add context or detail:
 
-**Common-cause failures (CCF)** are added on top: blocks that share a common-cause group (e.g. two identical IMUs) can fail together from a shared cause, using the alpha-factor model.
+- **Frames** group blocks under a labelled intermediate event in the tree, such as *Loss of attitude data*, and can show a subsystem's combined probability.
+- **Shared failure events** make several drawn blocks one physical failure.
+- **Common-cause failures (CCF)** let similar blocks fail together from a shared cause, using the alpha-factor model. They're optional and off for new projects.
 
 ---
 
-## Using the workbench
+## Drawing the architecture
 
 ### File bar
 
-| Button | Action |
-|---|---|
-| **Load file…** | Open a project `.json`, or a SysML file previously exported from this workbench. |
-| **Save .json** | Save the whole project (layout, data, groups, top event). |
-| **Undo** / **Redo** | Step back or forward through your changes: blocks, connections, frames, settings, Clear and Reset example included. **Ctrl+Z** undoes; **Ctrl+Shift+Z** or **Ctrl+Y** redoes (**⌘** on a Mac). A burst of typing in one field, or one drag, is a single step. The last 100 steps are kept until you reload the page. While you're typing in a field, the shortcuts undo text in that field instead. |
-| **IBD → PowerPoint** | Export the diagram as a widescreen `.pptx` slide built from native, editable shapes: blocks (stereotype, name and failure data), the top-event node, frames, curved connections with arrowheads, ports, flow labels, and the CCF and shared-event (`≡ TAG`) tags. Redundant connections and frames are dashed. |
-| **IBD → SVG** | Export the diagram as a vector image. |
-| **IBD → SysML v2** | Export the diagram as SysML v2 textual notation. |
-| **Fault tree → PowerPoint** | Export the generated tree as a `.pptx` slide built from native, editable shapes (boxes, gates, events, wires and labels), with the top-event probability in the title. |
-| **Fault tree → SVG** | Export the generated tree as a vector image. |
-| **Fault tree → Open-PSA XML** | Export the tree in the Open-PSA Model Exchange Format, for the [Fault Tree Editor](#fault-tree-editor) and other FTA tools. |
+| Group | Button | Action |
+|---|---|---|
+| Project | **Load file…** | Open a project `.json` or a SysML file exported from this page. |
+| | **Save .json** | Save the whole project as `architecture-project.json`. |
+| Edit | **Undo** / **Redo** | Step back or forward through every change. See [Keyboard shortcuts](#keyboard-shortcuts). |
+| Architecture | **PowerPoint**, **SVG**, **SysML v2** | Export the diagram. See [Import and export](#import-and-export). |
+| Fault tree | **PowerPoint**, **SVG**, **Open-PSA XML** | Export the fault tree of the analysis being shown. |
 
 ### Diagram toolbar
 
 | Button | Action |
 |---|---|
 | **+ Block** | Add a block. |
-| **+ Frame** | Add a labelled frame in the top-left corner, then drag it over the blocks it should group. The button only works when no block is selected, so a new frame is never tied to one component; click empty canvas to deselect first. See [Frames](#frames). |
-| **Connect** | Draw a connection: tap the source, then the target. The top-event node can only be a target. |
-| **Tidy** | Line everything up. See [Tidy](#tidy). Ctrl+Z undoes it. |
-| **Copy** / **Paste** | Copy the selected block, or a selected frame together with the blocks inside it and the connections between them, then paste a copy offset from the original. **Ctrl+C** / **Ctrl+V** (**⌘C** / **⌘V** on a Mac) work too. Pasting again places further copies. |
-| **Delete** | Delete the selected block (and its connections), connection or frame. Deleting a frame keeps its blocks. The top-event node can't be deleted. The **Delete** or **Backspace** key does the same. **Ctrl+X** (**⌘X** on a Mac) cuts instead: it copies the selection, then deletes it, and the next **Ctrl+V** puts it back in place. Cutting a frame removes its blocks too. |
-| **Clear** | Remove every block, connection and frame, leaving only the top-event node, for a blank slate. Click **Confirm clear** within 4 seconds to go ahead. Save first if you want to keep your work. |
-| **Reset example** | Replace the current project with the example. Save first if you want to keep your work. |
+| **+ Frame** | Add a labelled frame in the top-left corner, then drag it over the blocks it should group. It only works with no block selected, so a frame is never tied to one component; click empty canvas to deselect first. |
+| **Connect** | Draw a connection: tap the source, then the target. Drawing over an existing connection in the reverse direction makes it two-way. |
+| **Tidy** | Line everything up in columns that follow the flow. See [Tidy](#tidy). |
+| **Copy** / **Paste** | Copy the selected block, or a selected frame with its blocks and the connections between them, and paste a copy offset from the original. |
+| **Delete** | Delete the selected block (and its connections), connection or frame. Deleting a frame keeps its blocks. A deleted block is also removed from every analysis. |
+| **Clear** | Remove every block, connection and frame and start with one empty analysis. Click **Confirm clear** within 4 seconds. |
+| **Reset example** | Replace the project with the example. |
 
-Drag blocks or frames to move them; moving a frame moves the blocks inside it. Drag a frame's bottom-right corner to resize it. Click empty canvas to clear the selection.
+Save first if you want to keep your work before **Clear** or **Reset example**. Both can also be undone.
 
-**Copies are new, independent components.** A pasted block keeps the original's name and failure data, so rename it. The exception is a block with a shared failure event tag: its copy keeps the tag, so it's the same failure drawn again. That's a quick way to draw a shared component in a second place.
+**Moving and sizing:**
+- Drag blocks or frames to move them. Moving a frame moves the blocks inside it.
+- Drag a frame's bottom-right corner to resize it.
+- Click empty canvas to clear the selection.
 
-**Connections run in any direction.** Each connection leaves from the side of the source block that faces the target and enters the target on the side facing the source: left or right when the blocks are side by side, top or bottom when one is stacked above the other. Several connections on one side are spread out so they don't overlap. The arrowhead shows the direction of flow.
+**Copies are new, independent components.** A pasted block keeps the original's name and failure data, so rename it. The exception is a block with a shared failure event tag: its copy keeps the tag, so it's the same failure drawn again.
+
+### Keyboard shortcuts
+
+Use **⌘** instead of **Ctrl** on a Mac. Shortcuts are ignored while you're typing in a field.
+
+| Keys | Action |
+|---|---|
+| **Ctrl+C** / **Ctrl+V** | Copy / paste. |
+| **Ctrl+X** | Cut: copy, then delete. The next paste puts it back in place. Cutting a frame removes its blocks too. |
+| **Delete** or **Backspace** | Delete the selection. |
+| **Ctrl+Z** | Undo. A burst of typing in one field, or one drag, is a single step. The last 100 steps are kept until you reload the page. |
+| **Ctrl+Shift+Z** or **Ctrl+Y** | Redo. |
+| **Esc** | Finish picking blocks, or close an export panel. |
+
+### The canvas
+
+- **Blocks fit their text.** Each block is as wide as its name, stereotype and failure data need, up to 240 px. Longer names wrap and the block grows taller.
+- **Connections run in any direction.** Each connection leaves the side of the source that faces the target and enters the target on the side facing the source. Several connections on one side are spread out.
+- **Connections route around blocks.** A connection is a smooth curve where the way is clear. If the curve would pass under a block, it becomes a right-angled path around the blocks. Flow labels are placed where they don't cover a block, another label or a frame tag. Overlapping blocks can't be routed around; press **Tidy** to separate them.
+- **More room.**
+
+  | Control | Action |
+  |---|---|
+  | **+** at each edge | Adds space on that side. Adding on the left or top moves the diagram over, so nothing is cut off. |
+  | Dragging past the right or bottom edge | Grows the canvas as you drag a block or frame, or resize a frame. The view scrolls with you. |
+  | **Trim** | Removes empty space, down to the 1300 × 520 minimum. |
+
+  The diagram keeps its size on screen as the canvas grows; the panel scrolls instead.
 
 ### Tidy
 
-**Tidy** rearranges the diagram so it's neat and aligned, without changing the analysis:
+**Tidy** makes the diagram neat and aligned without changing any result:
 
-- **Columns follow the flow.** Blocks are placed left to right by how many inputs lead up to them, and the top event goes in the last column on the right. A block with no inputs, such as a battery or antenna, sits just before the first block that uses it.
-- **Rows keep your order.** Within each column, blocks stay in their current top-to-bottom order and are snapped into straight, evenly spaced rows.
-- **Frames move as a unit.** Each frame is refitted tightly around its own blocks, and no other block ends up inside it, so every frame keeps the same members. Nested frames stay nested.
-- **The canvas can grow.** If the tidied diagram doesn't fit the standard 1300 × 520 canvas, the canvas is enlarged.
-
-The fault tree, probabilities and cut sets are identical before and after.
+- **Columns follow the flow.**
+  - Blocks are placed left to right by how many inputs lead up to them. Two-way connections count in the direction they were drawn.
+  - A block with no inputs, such as a battery or antenna, sits just before the first block that uses it.
+  - Each column is as wide as its widest block.
+- **Rows keep your order.** Within a column, blocks keep their top-to-bottom order and snap into straight rows.
+- **Frames move as a unit.** Each frame is refitted around its own blocks and no other block ends up inside it, so frames keep their members. Nested frames stay nested.
+- **The canvas is resized** to fit the layout.
 
 ### Block settings
+
+Selecting a block, connection or frame opens its settings in the editor directly under the canvas, laid out in rows.
+
 
 | Field | Notes |
 |---|---|
@@ -119,78 +142,134 @@ The fault tree, probabilities and cut sets are identical before and after.
 | **Stereotype** | Free text shown as «stereotype», e.g. `sensor`, `power`. |
 | **Failure model** | *Constant failure rate λ* (per hour) or *Fixed probability* (per mission). Switching converts the value so the probability stays the same. |
 | **Value** | λ ≥ 0, or a probability from 0 to 1. The line below shows the resulting mission probability. |
-| **Common-cause group** | Blocks with the same name form a CCF group. Leave empty for none. Shown only when **Model common-cause failures** is on. |
-| **Shared failure event** | Blocks with the same tag are **one physical failure** drawn in several places. They share a single basic event that is counted once. Setting a tag that's already in use copies that block's failure data, and later edits stay in sync. The tag is shown as `≡ TAG` above the block. Leave empty for a block that is its own component. See [Modelling shared components](#modelling-shared-components). |
-| **Never fails (P = 0)** | Sets a fixed probability of 0. The block stays in the diagram and tree (dimmed) but never causes a failure itself. |
+| **Common-cause group** | Blocks with the same name form a CCF group. Shown only when **Model common-cause failures** is on. |
+| **Shared failure event** | Blocks with the same tag are **one physical failure** drawn in several places. They share one basic event, counted once, and their failure data stays in sync. Shown as `≡ TAG` above the block. |
+| **Never fails (P = 0)** | Sets a fixed probability of 0. The block stays in the diagram and tree (dimmed) but never fails by itself. |
 
 ### Connection settings
 
 | Field | Notes |
 |---|---|
-| **Flow** | What passes through, e.g. `28V`, `attitude`. Documentation only; it doesn't change the calculation. |
-| **Redundancy group** | Empty = required input. Connections into the **same target** with the **same group name** form a redundancy group. Redundant connections are drawn dashed. |
-| **Group loss threshold (k)** | Appears when the group has 2 or more inputs. The group is lost when **at least k** of its n inputs are lost. k = n (default) is AND, k = 1 is OR, anything between is a voting gate. The diagram label shows `k/n` when k < n. The setting is shared by every connection in the group. |
-| **Reverse direction** | Swaps source and target. Connections into the top event can't be reversed. |
+| **Flow** | What passes through, e.g. `28V`, `telemetry`. Documentation only. |
+| **Direction** | **One way** (A → B: B needs A) or **Two way** (A ↔ B). |
+| **Does B need A's flow?** | **Yes, required** (the default): B loses its output if it loses this flow. **Yes, as a backup**: the flow joins a redundancy group at B. **No** (two-way only): B doesn't depend on it. |
+| **Does A need B's flow?** | The same question for the other end of a two-way connection. |
+| **Redundancy group** | Connections into the same block with the same group name back each other up. |
+| **Group loss threshold (k)** | Appears when a group has 2 or more inputs. The group is lost when **at least k** of its n inputs are lost: k = n (default) is AND, k = 1 is OR, anything between is a vote. The label shows `k/n` when k < n. |
+| **Reverse direction** | One-way only: swaps source and target. |
 
-**Example: 2 of 6 rotors.** Connect all six motors to the top-event node, give each connection the redundancy group `Rotors`, then select any one of those connections and set the threshold to 2.
+**Reading the labels:**
+- **Backups are dashed:** a connection with a backup at either end is drawn dashed.
+- **Two-way connections** have an arrowhead at each end. Their label shows the non-default answers: `→` for the target's need, `←` for the source's, `∥group` for a backup and `✕` for not needed.
+- **Switching back to One way** keeps whichever direction is still needed, reversing the arrow if necessary.
 
-### Top event
-
-The top event is the rounded **TOP EVENT** node on the diagram. It isn't a component and has no failure data, so it never appears as a basic event; it's only the box at the top of the tree.
-
-- **Connect the blocks whose loss causes it.** Required connections mean any one of those losses causes the top event (OR). A redundancy group with threshold k means k of them must be lost.
-- **Rename it** in the Top event panel, or select the node.
-- **One cause, no extra gate.** If the top event has a single cause, the tree puts the top box directly above that cause's gate, without an extra one-input gate.
-
-| Field | Notes |
-|---|---|
-| **Undesired event** | The label at the top of the fault tree and on the node. |
-| **Mission time (hours)** | Used to convert failure rates to probabilities. |
-| **Model common-cause failures** | Shows the common-cause controls and includes the groups in the results. See [Turning common-cause failures on or off](#turning-common-cause-failures-on-or-off). |
-
-Projects saved before the top-event node existed picked a block as the top event. When you load one, a top-event node is added next to that block and connected to it, so the results are unchanged. The block's own failure stays in the tree as a basic event.
+**For a backup to work as intended**, put the block's main input in the **same** redundancy group as the backup. Otherwise the main input stays required and the backup never comes into play.
 
 ### Frames
 
-A frame is a labelled box drawn around blocks, such as a subsystem or a redundant channel. Its label becomes an intermediate event in the fault tree, so the tree reads *Failure of primary GNSS* instead of collecting every low-level failure under one OR gate.
+A frame is a labelled box around blocks, such as a subsystem or a redundant channel.
 
-- **Membership:** a block is inside a frame when its centre is.
-- **Effect on the tree:** where a block outside the frame depends on blocks inside it, the failures coming out of the frame are gathered under a gate labelled with the frame's text, drawn as a blue box.
-- **Gate type:** inside a required input or an AND group, the frame gate has the same type as the gate it sits in, so the logic is unchanged. Inside a k-of-n group, each input from the frame is labelled separately, because a vote can't be split.
-- **Nesting:** frames can be nested; the outer frame is applied first, then the inner one.
-- **Probability:** frames only regroup the tree. The top-event probability and cut sets are the same with or without them.
+- **Effect on the tree:** where a block outside the frame depends on blocks inside it, the failures coming out of the frame are gathered under a gate with the frame's label, drawn as a blue box.
+- **Membership:** a block is inside a frame when its centre is. The frame panel lists its blocks.
+- **Gate type:** inside a required input or an AND group, the frame gate has the same type as the gate it sits in, so the logic is unchanged. Inside a k-of-n group each input is labelled separately, because a vote can't be split.
+- **Nesting:** frames can be nested.
+- **No effect on results:** frames only regroup the tree. Probabilities and cut sets are the same with or without them.
 
-Select a frame to edit its label. The inspector lists the blocks inside it.
+**Combined probability.** Tick **Show combined probability** to show the subsystem's failure probability in an orange tag at the frame's top-right corner, or just above it if the frame is narrow.
+- **What it counts:** only failures of the blocks inside the frame. Blocks outside are taken as working, so the number describes the subsystem itself.
+- **Internal structure counts:** redundancy, voting, shared failure events and common-cause failures inside the frame are all included.
+- **The subsystem is lost when:**
+  - **All of its outputs are lost** (the default). The outputs are the blocks inside that feed a block outside.
+  - **Any of its outputs is lost**, for a frame that delivers several separate functions.
+  - A frame that feeds nothing outside treats every block inside as an output.
 
-### Common-cause groups panel
+It doesn't change the fault tree or any analysis.
 
-Lists each CCF group with editable **α₁ … αₘ** values (m = number of members, 2 to 6) and the resulting Qₜ, Q₁ … Qₘ. If the α values don't add up to 1 they are normalised, and a warning is shown.
+### Settings
 
-### Results
+| Field | Notes |
+|---|---|
+| **Mission time (hours)** | Converts failure rates to probabilities: P = 1 − e^(−λT). |
+| **Show failure data on blocks** | Hides the λ and P values on the diagram for a clean architecture view. The data is still used. |
+| **Model common-cause failures** | Shows the common-cause controls and includes the groups in the results. Turning it off keeps the groups but ignores them, and the note says how many blocks still have one. |
+
+---
+
+## Analyses
+
+An analysis names an undesired event and says which blocks must lose their output for it to happen. The diagram is the same for every analysis; only the fault tree changes.
+
+| Field | Notes |
+|---|---|
+| **Showing** | The analysis whose results are shown, listed alphabetically. The fault tree exports follow it. |
+| **+ New analysis**, **Duplicate**, **Delete** | Manage analyses. There's always at least one. |
+| **Undesired event** | The label at the top of the fault tree. |
+| **It occurs when** | **any** of the listed items is lost, **all** of them are, or **at least k** of them are. |
+| **Include** | A shortcut that sets every block in the list at once to **Everything** or **Own only**. It shows **a mix** when the rows differ. |
+| List of items | The blocks and analyses the event depends on, each with its own setting (below). Use **↑** and **↓** to reorder them; the order is the left-to-right order of the inputs under the top gate. Add them with **+ Add a block or analysis…**, or click **Pick on diagram** and tap blocks to add or remove them; they're outlined while you pick. Press **Done** or **Esc** to finish. |
+
+### Everything or own only, per block
+
+Each block in the list has its own setting:
+
+| Setting | Counts |
+|---|---|
+| **Everything** (default) | The block's own failure, plus anything upstream that stops it working, such as lost power or input data. |
+| **Own only** | Only the block's own failure. Its inputs are ignored. |
+
+Settings can be mixed in one analysis. For example, "any of: Flight Ctrl (own only), ESC (everything)" means the Flight Controller fails itself, or the ESC stops working for any reason.
+
+- **What own only still includes:** shared failure events and common-cause failures between own-only blocks, because those are failures of the blocks themselves.
+- **Own failure plus only *some* inputs:** list the block as own only, together with the input blocks you want. For example, "Flight Ctrl fails or loses power" is any of Flight Ctrl (own only) and PDB (everything).
+- **This is exhaustive.** Each block offers two events, "fails itself" and "stops working for any reason". Any, all and at least k, with analyses included in other analyses, can express any combination of them.
+
+### Analyses inside analyses
+
+The *Other analyses* section of **+ Add a block or analysis…** lists analyses that can be included. An included analysis is marked ▣ in the list. In the tree it appears as an intermediate event with an orange outline, with its own causes beneath it. It keeps its own settings.
+
+- **Shared causes are counted once.** In the example, losing flight control almost always means losing thrust too, because the ESC needs the Flight Controller. So an analysis "Mission loss" = any of "Loss of thrust" and "Loss of flight control" is 7.93 × 10⁻⁵, not the naive sum of 1.59 × 10⁻⁴. The result satisfies P(A or B) = P(A) + P(B) − P(A and B) exactly.
+- **No loops:** an analysis can't include itself, directly or through another, so those analyses aren't offered.
+- **Deleting an analysis** removes it from every analysis that included it, and Undo brings it back.
+
+---
+
+## Results
 
 | Section | What it shows |
 |---|---|
-| **Top-event probability** | P per mission, labelled *exact* or *rare-event approx.* |
-| **Repeated events** | Basic events that appear under more than one branch of the tree. Each is counted once. |
+| **Probability** | P(undesired event) per mission, labelled *exact* (or *rare-event approx.* for very large models). |
 | **Occurs about once in** | 1 / P missions. |
-| **Minimal cut sets** | Count of the smallest event combinations that cause the top event. |
-| **Single-point failures** | Events that cause the top event on their own. |
-| **Generated fault tree** | Boxes grow taller to fit long descriptions, and every box in a row matches the tallest one so the gates stay aligned. The top event at the top, then OR/AND gates, voting gates (OR shape marked `k/n`), basic events (circles) and transfer symbols (△) where a subtree is reused. A branch that's needed in several places is drawn in full once and tagged **T1**, **T2**…; every other place shows a △ with the same label instead of repeating it. It's one event, counted once. Every gate shows its exact probability. Blue boxes are frame labels. Repeated basic events are drawn with a heavier circle and an `R×n` tag. Red = single-point failure; dashed circle = common-cause event; dimmed = probability 0. |
+| **Minimal cut sets** | Count of the smallest event combinations that cause the event. |
+| **Single-point failures** | Events that cause it on their own. |
+| **Repeated events** | Basic events drawn under more than one branch of the tree. Each is counted once. |
+| **Fault tree** | See [The fault tree](#the-fault-tree). |
 | **Minimal cut sets table** | Each set with its order (SPF, CCF, ×2, ×3…), probability and share of the total. |
-| **Component importance** | Fussell–Vesely: the share of P(top) that disappears if the event can't occur. |
+| **Component importance** | Fussell–Vesely: the share of P that disappears if the event can't occur. |
 
-The tree preview starts at **Fit**: it scales to the panel width and the window height, so the whole tree is visible without scrolling. Hover over a box to read its full label and probability.
+### The fault tree
 
-To read or work on part of a large tree, zoom in:
+- **Layout:** the undesired event is at the top, then the gates and basic events beneath it.
+  - **Gates:** OR and AND gates, and voting gates (OR shape marked `k/n`). Every gate shows its exact probability.
+  - **Basic events** are circles.
+  - **Boxes** grow taller for long descriptions, and every box in a row matches the tallest.
+  - **Blue boxes** are frame labels; **orange-outlined boxes** are included analyses.
+- **No one-input gates.** A gate with a single input does nothing, so it isn't drawn: the box connects straight to that input. For example, an analysis on one block set to own only shows the undesired event directly above that block's failure.
+- **Transfers.** A branch that's needed in several places is drawn in full once and tagged **T1**, **T2**…. Every other place shows a △ with the same label. It's one event, counted once.
+- **Repeated basic events** have a heavier circle and an `R×n` tag.
+- **Colours:** red = single-point failure; dashed circle = common-cause event; dimmed = probability 0.
+
+**An AND gate is not the product of its inputs when they share a cause.** If both inputs depend on the same component, the gate occurs whenever that component fails, so its probability is much higher than the product. See [Finding a single point of failure](#finding-a-single-point-of-failure).
+
+**Zoom.** The tree starts at **Fit**, showing the whole tree without scrolling. Hover over a box for its full label and probability.
 
 | Control | Action |
 |---|---|
-| **+** / **−** | Zoom in or out around the centre of the panel. The percentage shows the current size. |
-| **Ctrl + mouse wheel** (**⌘** on a Mac), or a trackpad pinch | Zoom around the pointer. A plain wheel still scrolls the page. |
+| **+** / **−** | Zoom in or out around the centre of the panel. |
+| **Ctrl + mouse wheel**, or a trackpad pinch | Zoom around the pointer. A plain wheel scrolls the page. |
 | Drag | Pan when zoomed in. |
-| **Fit** | Return to the whole-tree view. |
+| **Fit** | Back to the whole tree. |
 
-The zoom level stays put while you edit. The PowerPoint and SVG exports are always full size, whatever the zoom.
+The zoom stays put while you edit. Exports are always full size.
 
 ---
 
@@ -198,21 +277,46 @@ The zoom level stays put while you edit. The PowerPoint and SVG exports are alwa
 
 ### Block logic
 
-For every block, its output is lost if **any** of these happen (OR):
+A block's output is lost if **any** of these happen:
 
 - the block fails internally;
-- any **required** input is lost;
-- **at least k of the n** inputs in a redundancy group are lost (k = n by default, which is AND within the group).
+- a **required** input is lost;
+- **at least k of the n** inputs in a redundancy group are lost (k = n by default).
 
-The top event occurs when its inputs are lost, by the same rules, but it has no internal failure of its own.
-
-The fault tree is built by walking backwards from the top-event node through its inputs. A block reached a second time is drawn as a transfer (△) rather than repeated; the full branch and its transfers share a label such as T1. Blocks with no inputs become basic events. Frames then regroup branches under their labels, as described in [Frames](#frames).
+An analysis's undesired event is lost by the same rules, with the listed items as its inputs and no failure of its own. A block set to **own only** counts as lost only when it fails internally.
 
 ### Probabilities
 
 - Constant failure rate: **P = 1 − e^(−λT)**, where T is the mission time.
 - Fixed probability: used as is.
-- Basic events are assumed independent, apart from the common-cause events described below.
+- Basic events are independent, apart from common-cause events.
+
+### Repeated events: exact, counted once
+
+A basic event is *repeated* when it reaches the undesired event through more than one path. That happens when a block feeds several others, when a CCF event is shared by several members, when blocks share a failure tag, or when two included analyses have causes in common. Multiplying and adding gate probabilities naively would count such an event more than once.
+
+The page builds a **binary decision diagram (BDD)** of the whole logic, where every basic event is one variable. The probability, every gate probability in the tree and the importance values are computed exactly from it.
+
+Example: A feeds both B and C, and the event needs both B and C lost. With P(A) = 0.1, P(B) = 0.2 and P(C) = 0.3:
+
+| Method | Result |
+|---|---|
+| Exact | 0.1 + 0.9 × 0.2 × 0.3 = **0.154** |
+| Treating the branches as independent | 0.193 |
+
+If a model is too large for the BDD (more than 300,000 nodes), P falls back to the **rare-event approximation**, the sum of cut-set probabilities, which overestimates. The readout says so.
+
+### Loops
+
+Two-way connections, and one-way connections that form a cycle, create loops. They're calculated exactly: a loss must start in a real component failure and then spreads around the loop. A loop on its own can't keep a failure going.
+
+- **Probability:** loops are found automatically and solved by repeating until nothing changes (the *least fixed point*).
+- **Tree:** it's still an ordinary acyclic fault tree. A branch that would lead back to a block already above it on the same path stops there.
+- **Checked:** across many random architectures with loops, two-way links and per-end settings, the result matched an exhaustive check of every failure combination.
+
+### Minimal cut sets
+
+Minimal cut sets are read straight from the BDD, so they're exact. A k-of-n group produces every k-member combination; 2 of 6 gives C(6,2) = 15. Events with probability 0 are left out. The table shows up to 20,000 sets.
 
 ### Common-cause failures (alpha-factor model)
 
@@ -222,144 +326,149 @@ For a group of m members with alpha factors α₁ … αₘ:
 - Qₜ = the average of the members' probabilities
 - Qₖ = k / C(m−1, k−1) · αₖ / αₜ · Qₜ, the probability of each **specific** event that fails exactly k members together
 
-Each member's own basic event is replaced by its **independent** part, α₁ / αₜ × P(member), and one CCF basic event is added for every combination of 2 or more members. A member fails if its independent event or any CCF event that includes it occurs.
+Each member's own event becomes its **independent** part, α₁ / αₜ × P(member). One CCF event is added for every combination of 2 or more members; a group of 3 gets three pair events and one triple. A member fails if its independent event or any CCF event that includes it occurs.
 
-A group of 3, for example, gets three pair events and one triple event.
+The panel lists each group with editable **α₁ … αₘ** and the resulting Qₜ, Q₁ … Qₘ. Values that don't add up to 1 are normalised, with a warning.
 
-### Minimal cut sets
+---
 
-Cut sets are built bottom-up (OR = union of lists, AND = cross-product) and reduced to minimal sets by removing duplicates and supersets. A k-of-n group is expanded as the OR of the AND of every k-member subset, so 2 of 6 produces C(6,2) = 15 combinations. Events with probability 0 are left out. Each AND expansion is capped at 6,000 combinations to keep the page responsive.
+## Modelling guidance
 
-In the example, the 15 motor-pair cut sets sum to 6.0 × 10⁻⁹ per hour, which matches the binomial result P(≥2 of 6) = 1 − (1−p)⁶ − 6p(1−p)⁵ with p ≈ 2 × 10⁻⁵.
+### Shared components
 
-### Repeated events and top-event probability
+Each block is one basic event, so a component that several others depend on is counted once. There are two ways to draw one:
 
-A basic event is *repeated* when it reaches the top event through more than one path, for example a block that feeds several others, a CCF event shared by several members, or blocks tagged with the same **shared failure event**. Multiplying and adding gate probabilities naively would count such an event more than once.
+- **Draw it once and connect it everywhere it's needed.** No other setting is needed.
+- **Draw it in several places and tag the copies** with the same **shared failure event** tag, such as `ANT-1`. Use this when one block can't reasonably connect to everything. The copies become one event, and their failure data stays in sync.
 
-The workbench avoids this by building a **binary decision diagram (BDD)** of the whole logic, where every basic event is one variable. The top-event probability, every gate probability in the tree and the Fussell–Vesely importance are computed exactly from the BDD, so each event is counted once, however many branches it appears in. There is no limit on the number of events.
+Keep these cases apart:
 
-Example: A feeds both B and C, and the top event needs both B and C lost. With P(A) = 0.1, P(B) = 0.2 and P(C) = 0.3, the exact result is 0.1 + 0.9 × 0.2 × 0.3 = 0.154. Treating the two branches as independent would give 0.193.
+- **Untagged blocks are always separate components**, even with the same name. Pasting an untagged block models a second, independent part.
+- **Identical parts that can fail together** from a shared cause, such as the same batch, environment or software, are separate blocks in a common-cause group, not a shared failure event.
 
-If a model is too large for the BDD (more than 300,000 nodes), P falls back to the **rare-event approximation** (sum of cut-set probabilities, capped at 1), which overestimates P, and the readout says so.
+### Two-way connections
 
-### Worked example: comparing with a hand calculation
+Set each end to what that block really needs:
 
-This example follows a typical hand calculation and shows which steps the workbench performs automatically.
+| Situation | Setting |
+|---|---|
+| Each end can't work without the other (handshake, closed control loop) | Required both ways |
+| Data flows both ways, but one side carries on without the replies | **No** at that side, or a one-way arrow |
+| Cross-channel or backup data between redundant units | **Backup** at each end, in the same group as that unit's main input |
 
-**The equation.** Expanding a fault tree gives this Boolean equation:
+**Avoid "required both ways" by default.** It makes everything on one side depend on everything on the other. For example, if a computer and a radio are required both ways, losing the radio's ground link can count as losing the computer. When an analysis on one block lists unrelated parts of the system as single-point failures, check its two-way connections first.
+
+### Narrowing an analysis without changing the diagram
+
+To ask a narrower question, such as "what stops the autonomy computer itself?":
+
+| Situation | Use |
+|---|---|
+| The dependency is real, but you want to leave it out of this one question | Set the block to **Own only** and add only the inputs you want, each set to Everything or Own only |
+| The dependency isn't real, e.g. data passes through but its loss doesn't stop the block | Correct the connection: set that end to **No** |
+| You want to leave a part out of every analysis | Correct or remove its connections. Don't set its probability to 0 |
+
+Change a connection's **end** setting rather than reversing its arrow. Reversing a two-way connection changes nothing, and reversing a one-way arrow makes the *other* block depend on this one.
+
+---
+
+## Worked examples
+
+### Comparing with a hand calculation
+
+**The equation.** A tree expands to:
 
 ```
 [(A·B) + (C + B + D + E)] · [(B + F + G) + G] · H
 ```
 
-B appears in both brackets and G appears twice in the second, so both are repeated events.
-
 **Hand simplification.**
 
-1. First bracket: B + A·B = B (absorption law, X + X·Y = X), which gives B + C + D + E.
-2. Second bracket: G + G = G (idempotent law, X + X = X), which gives B + F + G.
-3. Combine: (B + C + D + E) · (B + F + G) = B + (C + D + E)·(F + G) (distributive law, (X + Y)·(X + Z) = X + Y·Z).
-
-The result is:
+1. Absorption, B + A·B = B, gives B + C + D + E.
+2. Idempotence, G + G = G, gives B + F + G.
+3. Distribution, (X + Y)·(X + Z) = X + Y·Z, gives:
 
 ```
 [B + (C + D + E)·(F + G)] · H
 ```
 
-**What the workbench does instead.** It derives the logic from the block diagram rather than from a typed equation, and applies the same laws while building the minimal cut sets:
+**What the page does instead.** It applies the same laws while building the minimal cut sets: each event appears once in a cut set, and supersets are removed. The 7 minimal cut sets are {B, H}, {C, F, H}, {C, G, H}, {D, F, H}, {D, G, H}, {E, F, H} and {E, G, H}.
 
-| Hand step | Workbench equivalent |
-|---|---|
-| Idempotent law (G + G = G) | Each event appears once in a cut set, so G·G becomes G. |
-| Absorption law (B + A·B = B) | Any cut set that contains a smaller cut set is removed, so {A, B} is dropped because {B} exists. |
-| Distributive law and final form | The minimal cut sets are the simplified equation written out as a sum of products. |
-
-For this equation the cut-set table lists 7 minimal cut sets: {B, H}, {C, F, H}, {C, G, H}, {D, F, H}, {D, G, H}, {E, F, H} and {E, G, H}. Event A drops out, as it does in step 1.
-
-**Probabilities.** With these per-mission values:
+**Probabilities used:**
 
 | Event | A | B | C | D | E | F | G | H |
 |---|---|---|---|---|---|---|---|---|
 | P | 2.56E−06 | 1.10E−03 | 1.16E−03 | 5.36E−06 | 1.20E−03 | 1.10E−03 | 1.10E−02 | 7.77E−04 |
 
-| Method | P(top) |
+| Method | P |
 |---|---|
-| Hand calculation: + as addition, · as multiplication (rare-event approximation) | 8.7694 × 10⁻⁷ |
-| Sum of the 7 minimal cut-set probabilities | 8.7694 × 10⁻⁷ |
-| **Workbench (exact, BDD)** | **8.7688 × 10⁻⁷** |
-| Brute force over all 256 event combinations of the original equation | 8.7688 × 10⁻⁷ |
+| Hand calculation, + as addition (rare-event approximation) | 8.7694 × 10⁻⁷ |
+| **Exact (BDD)** | **8.7688 × 10⁻⁷** |
+| Brute force over all 256 combinations | 8.7688 × 10⁻⁷ |
 | Unsimplified equation with + and · applied directly | 6.5 × 10⁻⁸ (wrong) |
 
-What the comparison shows:
+- **The hand result is right to 3 significant figures.** Treating + as addition slightly overestimates; the exact rule is P(X or Y) = P(X) + P(Y) − P(X)·P(Y).
+- **The unsimplified equation is 13 times too low** because it multiplies the two B terms as if they were independent failures. The page avoids this automatically.
 
-- **The hand result is right to 3 significant figures** (8.77 × 10⁻⁷). Treating + as addition is the rare-event approximation: it ignores the small chance that two cut sets occur together, so it always overestimates slightly. The workbench uses the exact rule P(X or Y) = P(X) + P(Y) − P(X)·P(Y). The difference is negligible here but grows for probabilities around 10⁻² and above.
-- **Simplifying first is essential by hand.** Putting numbers into the unsimplified equation multiplies the two B terms as if they were independent failures, which gives a result about 13 times too low. The workbench avoids this automatically because each event is a single variable, however many branches it appears in, so no hand simplification is needed.
+### Finding a single point of failure
 
-**Modelling this in the workbench.** Draw each component as one block. If a component feeds several branches, such as B and G here, connect that single block to every place that needs it, or draw it more than once and give every copy the same shared failure event tag. See [Modelling shared components](#modelling-shared-components).
+A UAV's control link is lost only if **both** links are lost:
+- **Connect 5G** = any of: 5G radio, Single Board Computer (SBC), antennas.
+- **Connect SL** = any of: SBC, SL radio, Rx and Tx antennas.
 
-### Modelling shared components
+Every block is set to own only, and the SBC appears in both links.
 
-Each block is one basic event, so a component that several others depend on is counted once. There are two ways to draw such a component:
+**Simplify:** (S + c + x) · (S + r + rx + tx) = **S + (c + x)·(r + rx + tx)**
 
-- **Draw it once and connect it everywhere it's needed.** If a single power supply, antenna or bus feeds B and C, draw one block and connect it to both. No other setting is needed.
-- **Draw it in several places and tag the copies.** Sometimes one block can't reasonably connect to everything, for example a component used by distant parts of the diagram, or one that would make the diagram unreadable. Draw a block in each place and give every copy the same **shared failure event** tag, such as `ANT-1`. The copies become one basic event, their failure data stays in sync, and each shows `≡ ANT-1` above it.
+So the link is lost if the SBC fails, or if both a 5G-only and an SL-only part fail.
 
-Either way, the fault tree shows the component under every branch it affects, marked `R×n`, and every probability counts it once.
+| Quantity | Value |
+|---|---|
+| P(SBC) | 1.1 × 10⁻³ |
+| P(5G-only part) · P(SL-only part) | 4.50 × 10⁻⁴ × 5.31 × 10⁻⁴ |
+| **P(control link lost)** | S + (1 − S) × 2.39 × 10⁻⁷ = **1.100 × 10⁻³** |
+| Share from the cut set {SBC} | 99.98% |
+| P if the SBC never failed | 2.39 × 10⁻⁷, about 4,600 times lower |
+| Naive product of the two links | 2.53 × 10⁻⁶ (435 times too low) |
 
-Keep these cases apart:
-
-- **Untagged blocks are always separate components,** even if they have the same name, such as two identical antennas. Their failures are combined as independent events. Copying and pasting an untagged block therefore models a second, independent part and double counts a component that is really shared.
-- **Identical parts that can fail together** from a shared cause, such as the same batch, environment or software, are separate blocks in a common-cause group (see [Common-cause failures](#common-cause-failures-alpha-factor-model)), not a shared failure event.
-
-### Loops
-
-Static fault trees can't represent circular dependencies. If the connections form a loop, the analysis cuts it when it revisits a block, so that path contributes nothing and the risk may be **understated**. Keep connections one-way and acyclic. For a shared bus, model the bus as its own block that both ends depend on.
+The page gives the same numbers. It lists the SBC as the only single-point failure, with 99.98% importance, and marks it `R×2` in the tree. The two radios back each other up, but not against the computer they share.
 
 ---
 
 ## Import and export
 
-### Saving files
+| Export | File | Contents |
+|---|---|---|
+| Architecture → **PowerPoint** | `architecture.pptx` | One widescreen slide built from editable shapes: blocks, frames with probability tags, connections with arrowheads (routed paths included), ports, flow labels and tags. |
+| Architecture → **SVG** | `architecture.svg` | A vector image of the diagram, cropped to its content. |
+| Architecture → **SysML v2** | `architecture.sysml` | Textual notation (see below). |
+| Fault tree → **PowerPoint** | `fault-tree.pptx` | The tree of the analysis being shown, as editable shapes, with the probability in the title. Large trees are scaled to PowerPoint's 56-inch slide limit. |
+| Fault tree → **SVG** | `fault-tree.svg` | A vector image of the tree. |
+| Fault tree → **Open-PSA XML** | `fault-tree.xml` | The tree in the Open-PSA Model Exchange Format (see below). |
 
-When the page is opened directly in a browser, exports download straight away with their normal names (`ibd.sysml`, `fault-tree.xml`).
+**Saving the files:**
+- **Opened directly in a browser:** files download straight away.
+- **Inside Claude:** each export asks you to confirm. Two formats are saved with an extra `.txt` ending there (`architecture.sysml.txt`, `fault-tree.opsa.xml.txt`), so rename them after saving.
+- **PowerPoint export** loads the PptxGenJS library from cdn.jsdelivr.net the first time it's used, so it needs an internet connection.
 
-When the page runs inside Claude, each export asks you to confirm the save. If saving isn't available in that view, the content opens in a panel with a **Copy** button so you can paste it into a file yourself. Two formats are saved there with an extra `.txt` ending, because only certain file types can be saved; rename them after saving:
+**SysML v2** contains:
+- one `part def` per block, with its failure data, common-cause group and shared failure event;
+- ports per connection, and a `part system` with every part and connection;
+- `redundancyGroup` on redundant connections;
+- `bidirectional`, `targetNeedsSource` and `sourceNeedsTarget` on two-way connections;
+- the mission time, and the analyses as a comment.
 
-| Saved as | Rename to |
-|---|---|
-| `ibd.sysml.txt` | `ibd.sysml` |
-| `fault-tree.opsa.xml.txt` | `fault-tree.xml` |
+The file carries the full project in a comment (`ft-layout:…`), so **Load file…** restores it exactly. Only SysML exported from this page can be loaded back.
 
-### SVG (IBD and fault tree)
+**Open-PSA XML** is the exact tree on screen:
+- **Gates:** one per gate, including block, group, frame and analysis gates, each with its label.
+- **Basic events:** one per basic event, with per-mission probabilities, already converted from rates and split by the alpha-factor model.
+- **k-of-n groups** become `<atleast min="k">`.
+- **Page-only details** go in `<attributes>`, which other tools ignore.
 
-Light-themed, self-contained vector images with styles embedded, suitable for reports and slides. The IBD export is cropped to the blocks and omits the canvas grid and selection highlights.
+Open the file in the [Fault Tree Editor](#fault-tree-editor), or check the results with another Open-PSA tool such as SCRAM.
 
-### SysML v2
-
-Textual notation with:
-
-- one `item def` and `port def` per flow type;
-- one `part def` per block, with attributes `failureRate` or `fixedFailureProbability`, `commonCauseGroup`, and an out/in (conjugated) port per connection;
-- a `lossThreshold_<group> : Integer` attribute on any block whose redundancy group uses k < n;
-- a `part system` holding a part usage for every block, a `connection … connect` for every link, `redundancyGroup` attributes on redundant connections, the `missionTime` attribute, and the CCF alpha values as comments.
-
-The file also carries the full project in a comment (`ft-layout:…`), which is how **Load file…** restores it with block positions intact. The workbench can't read SysML written by other tools. The export is a starting point for import into a SysML v2 tool; check it against your tool's library before relying on it.
-
-### Open-PSA XML
-
-The Open-PSA Model Exchange Format, accepted by SCRAM and other Open-PSA-compatible tools, and by the [Fault Tree Editor](#fault-tree-editor).
-
-- **Same tree as on screen.** The file contains the generated tree: one gate for each gate on the page, including the top event, block gates (`G_<block>_output_lost`), redundancy-group gates and frame gates, each with its label.
-- **Basic events:** one per failure event, including CCF events.
-- **k-of-n groups** are written as `<atleast min="k">`.
-- **Workbench-only details** go in `<attributes>`: `ftw-kind` (top, block, group or frame) on gates, and `ftw-ccf` on common-cause events. Other tools ignore them.
-- **Probabilities** are written as **per-mission values**, already converted from rates and already split by the alpha-factor model.
-
-The file names the top gate in a comment at the start. Use the file to edit the tree in the editor, or to check the results with an independent solver.
-
-### Browser storage
-
-The current project is kept in your browser automatically (key `ft-workbench-v2`). It stays on that browser only: it doesn't sync across devices and is lost if site data is cleared. Save a `.json` for anything you want to keep.
+**Browser storage.** The current project is kept in your browser automatically (key `ft-architecture-v1`), on that browser only. Save a `.json` for anything you want to keep or share.
 
 ---
 
@@ -367,50 +476,54 @@ The current project is kept in your browser automatically (key `ft-workbench-v2`
 
 ```json
 {
-  "top": "thrust",
-  "topText": "Loss of thrust",
   "T": 1,
-  "ccfOn": true,
-  "ccf": { "IMU": [0.95, 0.05] },
-  "vote": { "thrust|Rotors": 2 },
+  "ccfOn": false,
+  "showData": true,
+  "active": "a1",
+  "analyses": [
+    { "id": "a1", "name": "Loss of thrust", "mode": "atleast", "vote": { "Targets": 2 },
+      "targets": [ { "id": "m1", "group": "Targets", "own": false } ] }
+  ],
   "blocks": [
-    { "id": "imua", "name": "IMU A", "st": "sensor",
-      "mode": "rate", "v": 5e-5, "ccf": "IMU", "x": 360, "y": 40 },
-    { "id": "thrust", "kind": "top", "name": "Loss of thrust", "x": 1150, "y": 220 }
+    { "id": "m1", "name": "Motor 1", "st": "actuation", "mode": "rate", "v": 2e-5,
+      "ccf": "", "rep": "", "x": 885, "y": 12 }
   ],
   "links": [
-    { "id": "l5", "from": "imua", "to": "fc", "flow": "attitude", "group": "IMU" }
+    { "id": "l9", "from": "fc", "to": "esc", "flow": "PWM ⇄ telemetry",
+      "both": true, "needB": "req", "needA": "req", "group": "", "groupA": "" }
   ],
   "frames": [
-    { "id": "fimu", "label": "Loss of attitude data", "x": 344, "y": 16, "w": 160, "h": 184 }
-  ]
+    { "id": "fimu", "label": "Loss of attitude data", "x": 344, "y": 16, "w": 160, "h": 184,
+      "showP": true, "lost": "all" }
+  ],
+  "ccf": {},
+  "vote": {}
 }
 ```
 
 | Field | Type | Meaning |
 |---|---|---|
-| `top` | string | Id of the top-event node. |
-| `topText` | string | Top event label (the same as the top-event node's name). |
 | `T` | number > 0 | Mission time in hours. |
-| `ccfOn` | boolean | Whether common-cause groups are modelled. Missing = on if any block has a group. |
-| `ccf` | object | CCF group name → array of alpha values α₁ … αₘ. |
-| `vote` | object | `"<target block id>|<redundancy group>"` → k, the number of lost inputs that loses the group. Missing = all (n). |
-| `blocks[].id` | string | Unique id. |
-| `blocks[].kind` | `"top"` or empty | `"top"` marks the top-event node. Exactly one block has it; its failure fields are ignored. |
+| `ccfOn` | boolean | Whether common-cause groups are modelled. |
+| `showData` | boolean | Whether failure data is shown on blocks. |
+| `active` | string | Id of the analysis being shown. |
+| `analyses[].name` | string | The undesired event. |
+| `analyses[].mode` | `any`, `all` or `atleast` | How the items combine. |
+| `analyses[].vote` | object | `{"Targets": k}` for at least k. |
+| `analyses[].targets[]` | array | Items: `id` is a block id, or `"@"` + another analysis's id. `group` is `"Targets"` for all / at least k. `own` is `true` for own only. |
 | `blocks[].name` / `st` | string | Name and stereotype. |
-| `blocks[].mode` | `"rate"` or `"prob"` | Failure model. |
-| `blocks[].v` | number | λ per hour (`rate`) or probability 0–1 (`prob`). |
-| `blocks[].ccf` | string | Common-cause group name, or empty. |
-| `blocks[].rep` | string | Shared failure event tag, or empty. Blocks with the same tag share one basic event. |
+| `blocks[].mode` / `v` | `rate` or `prob` / number | λ per hour, or probability 0–1. |
+| `blocks[].ccf` / `rep` | string | Common-cause group and shared failure event tag, or empty. |
 | `blocks[].x`, `y` | number | Position on the canvas. |
-| `cw`, `ch` | number | Canvas size, when Tidy has enlarged it beyond 1300 × 520. |
 | `links[].from` / `to` | string | Source and target block ids. |
-| `links[].flow` | string | Flow label. |
-| `links[].group` | string | Redundancy group name, or empty for a required input. |
-| `frames[].label` | string | Text of the frame, used as the intermediate event in the tree. |
-| `frames[].x`, `y`, `w`, `h` | number | Position and size of the frame on the canvas. |
-
-Files from the first version (with `p` instead of `mode`/`v`) load as constant rates. Files without a top-event node get one, connected to their old top block.
+| `links[].group` | string | Redundancy group at the target, or empty for required. |
+| `links[].both` | boolean | `true` for a two-way connection. |
+| `links[].needB`, `needA` | `req`, `grp` or `no` | Two-way only: does the target need the source (`needB`), and does the source need the target (`needA`)? |
+| `links[].groupA` | string | Two-way only: backup group at the source. |
+| `frames[]` | array | `label`, position and size, `showP` (show combined probability) and `lost` (`all` or `any`). |
+| `ccf` | object | CCF group name → alpha values α₁ … αₘ. |
+| `vote` | object | `"<block id>|<group>"` → k, for redundancy groups on connections. |
+| `cw`, `ch` | number | Canvas size when it's larger than 1300 × 520. |
 
 ---
 
@@ -420,73 +533,60 @@ Files from the first version (with `p` instead of `mode`/`v`) load as constant r
 |---|---|
 | Component failure rates λ | **NPRD-2023** (nonelectronic parts), MIL-HDBK-217 or similar for electronics, supplier data, your own field data. |
 | Failure mode split (lost vs wrong output) | **FMD-2016**, Quanterion's companion to NPRD. Not modelled in this version. |
-| Alpha factors | Your own maintenance and incident records; US NRC common-cause parameter estimates (originally NUREG/CR-5497) by analogous component type; or a beta factor from **IEC 61508-6 Annex D**. |
+| Alpha factors | Your own maintenance and incident records; US NRC common-cause parameter estimates (NUREG/CR-5497) by analogous component type; or a beta factor from **IEC 61508-6 Annex D**. |
 
-**From your own records:** count failure events that hit exactly k members of the group, nₖ, then αₖ = nₖ / Σ nᵢ.
-
-**From a beta factor (pairs only):** α₂ = β / (2 − β), α₁ = 1 − α₂. For example, β = 5% gives α₁ ≈ 0.974, α₂ ≈ 0.026. For groups of three or more, there's no unique conversion from a single β.
-
-**Don't confuse NPRD's α and β with CCF factors.** In NPRD they are the Weibull characteristic life and shape parameters, which are unrelated.
+- **Alpha factors from your own records:** count the failure events that hit exactly k members of the group, nₖ. Then αₖ = nₖ / Σ nᵢ.
+- **From a beta factor (pairs only):** α₂ = β / (2 − β) and α₁ = 1 − α₂. For example, β = 5% gives α₁ ≈ 0.974 and α₂ ≈ 0.026. For groups of three or more, there's no unique conversion from a single β.
+- **Don't confuse NPRD's α and β with CCF factors.** In NPRD they're the Weibull characteristic life and shape parameters.
 
 ---
 
 ## Fault Tree Editor
 
-`Fault Tree Editor.html` edits a fault tree directly, without the block diagram behind it. Use it to adjust a generated tree for a report, try what-if probabilities, or rework a tree from another Open-PSA tool. It recalculates as you edit, using the same exact BDD method as the workbench.
+`Fault Tree Editor.html` edits a fault tree directly, without the diagram behind it. Use it to adjust a tree for a report, try what-if probabilities, or rework a tree from another Open-PSA tool. It recalculates exactly as you edit.
 
-### Opening a tree
-
+**Opening a tree:**
 1. In the workbench, click **Fault tree → Open-PSA XML**.
-2. In the editor, click **Open XML…** and choose the file, or drop it onto the page.
+2. In the editor, click **Open XML…**, or drop the file onto the page.
 
-The editor opens the top gate named in the workbench's comment, or else the gate that no other gate uses. It also reads files from other Open-PSA tools if they use OR, AND and at-least gates (nested formulas included), and basic events given as a `float`, a `parameter` or an `exponential` of two floats. Anything else is reported when the file opens. **New tree** starts a tree with one gate and one basic event.
+**Other files:**
+- **Files from other Open-PSA tools** also open if they use OR, AND and at-least gates, with probabilities given as a `float`, a `parameter` or an `exponential` of two floats. Anything else is reported.
+- **New tree** starts from one gate and one basic event.
 
-The tree is kept in your browser automatically (key `ft-editor-v1`). Changes don't flow back to the workbench project: the editor works on the tree, not the IBD.
-
-### Editing
-
-Tap any box in the tree to select it. The panel on the right shows what you can change. The tree has the same zoom controls as the workbench (**−**, **Fit**, **+**, Ctrl + wheel, drag to pan). **Selection**, or a double-click on a box, zooms to 100% centred on that box.
+**Editing.** Tap a box to select it.
 
 | Selected | What you can do |
 |---|---|
-| **Top event or gate** | Edit the description. Change the type: OR, AND, or at least k of the inputs. Reorder (↑ ↓) or remove (✕) inputs. Add a new basic event or gate, or an existing one. Tick several inputs and click **Group checked under new gate** to put them under a new labelled intermediate event. |
+| **Top event or gate** | Edit the description. Change the type (OR, AND, at least k). Reorder (↑ ↓) or remove (✕) inputs. Add a new or existing event or gate. Tick inputs and click **Group checked under new gate** to add a labelled intermediate event. |
 | **Basic event** | Edit the description and the probability per mission. |
-| **Anything but the top event** | **Insert gate above** wraps it in a new gate. **Remove from parent** takes it out of the gate it was selected under. |
+| **Anything but the top** | **Insert gate above** wraps it in a new gate. **Remove from parent** takes it out of its gate. |
 
-The **Basic events** table lists every event with editable description and probability fields, sorted by importance, so you can change several probabilities quickly.
+- **Basic events table:** every probability, sorted by importance, editable in place.
+- **Undo and redo:** Ctrl+Z, and Ctrl+Shift+Z or Ctrl+Y.
+- **Tidying up:** unused items are removed automatically, and loops can't be created.
+- **Grouping keeps the result:** grouping inputs of an OR gate under a new OR gate, or of an AND gate under a new AND gate, adds a label without changing any probability.
+- **Zoom:** the same controls as the workbench. Double-click a box, or press **Selection**, to zoom to it.
+- **Exports:** Open-PSA XML, PowerPoint and SVG.
 
-- **Undo and Redo** (**Ctrl+Z**, **Ctrl+Shift+Z** or **Ctrl+Y**) cover every change.
-- **Unused items are removed.** An event or gate that's no longer used anywhere is deleted automatically.
-- **Loops are blocked.** The "add existing" list never offers a gate that would create a loop.
-
-**Adding labels without changing the result.** Grouping inputs of an OR gate under a new OR gate, or inputs of an AND gate under a new AND gate, adds an intermediate event but leaves every probability unchanged. Grouping is not offered for several inputs of an at-least gate, because that would change the vote. Changing a gate's type, or adding and removing inputs, does change the logic.
-
-**Repeated events.** Adding an existing event under a second gate makes it a repeated event: it's drawn in both places, marked `R×n`, and counted once. A gate used in more than one place is drawn in full once, tagged **T1**, **T2**…, and shown elsewhere as a transfer (△) with the same label.
-
-### Results and export
-
-- **Results:** the top-event probability, single-point failures, repeated events and minimal cut sets, as in the workbench. Every gate shows its exact probability. An empty gate is outlined in red and never occurs until it has inputs.
-- **Exports:** Open-PSA XML (which the editor and the workbench's other tools can read), PowerPoint (editable shapes, as in the workbench) and SVG.
+Edits in the editor don't update the workbench project, because the editor works on the tree, not the diagram. The tree is kept in the browser (key `ft-editor-v1`).
 
 ---
 
 ## Limitations
 
 - **Not a certified tool.** Use it for early design and trade studies; verify safety-case numbers with a qualified tool and process (e.g. ARP4761, ISO 26262, IEC 61508).
-- **One failure mode per block.** Every failure is treated as "output lost". Erroneous output, late output and other modes aren't distinguished, and flow types don't change the logic.
-- **Static fault trees only.** No sequence dependencies, spares, repair or cross-monitoring; those need dynamic fault trees or Markov models.
-- **Loops are cut**, which may understate risk (see [Loops](#loops)).
-- **Independence assumed** apart from the CCF groups you define. Shared hidden causes (software, environment, maintenance) must be modelled explicitly.
-- **CCF groups** are limited to 2–6 members, and Qₜ uses the members' average probability, which is most accurate when members are identical.
+- **One failure mode per block.** Every failure is "output lost". Erroneous or late output isn't distinguished, and flow types don't change the logic.
+- **Static fault trees only.** No sequence dependencies, spares, repair or cross-monitoring.
+- **Independence is assumed** apart from the common-cause groups you define. Shared hidden causes (software, environment, maintenance) must be modelled explicitly.
+- **Common-cause groups** have 2–6 members, and Qₜ uses the members' average probability, which is most accurate when members are identical.
 - **Constant failure rates**: wear-out and infant mortality aren't modelled.
-- **k-of-n is count-based.** It treats all inputs in the group as equal. Losing two *adjacent* rotors on a hexacopter is often worse than losing two opposite ones; to capture that, model the specific bad pairs explicitly instead.
+- **k-of-n is count-based** and treats all inputs as equal. To capture specific bad combinations, such as two adjacent rotors, model those pairs explicitly.
 - **Renaming a redundancy group** resets its threshold to k = n.
-- **Performance**: large or highly redundant models may hit the 6,000-combination cap in the cut-set table, or fall back to the rare-event approximation. The exact probability doesn't depend on the cut-set cap.
-- **Shared failure events** use the first tagged block's common-cause group; groups set on the other tagged blocks are ignored.
-- **PowerPoint export** loads the PptxGenJS library from cdn.jsdelivr.net the first time it's used, so it needs an internet connection. The IBD is scaled to fit one widescreen slide. Very large fault trees are scaled down to PowerPoint's 56-inch slide limit.
-- **SysML import** only reads files exported by this workbench.
-- **Frames use block centres**, so a block only half inside a frame may or may not belong to it. Frames don't regroup the inputs of a k-of-n group into one sub-gate.
-- **The editor and the workbench are separate.** Edits made in the Fault Tree Editor don't update the workbench project, and the editor supports OR, AND and at-least gates only (no NOT, XOR or house events).
+- **Frames use block centres**, so a block half inside a frame may or may not belong to it. Renaming a block changes its width and centre, which can move it in or out of a frame near the edge.
+- **Overlapping blocks** can't be routed around; Tidy separates them.
+- **Very large models** may fall back to the rare-event approximation, and the cut-set table shows at most 20,000 sets.
+- **SysML import** reads only files exported from this page.
+- **The Fault Tree Editor** supports OR, AND and at-least gates only (no NOT, XOR or house events), and its edits don't flow back to the workbench.
 
 ---
 

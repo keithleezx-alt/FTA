@@ -454,6 +454,8 @@ function drawTree(A){
       `<rect class="ft-box${n.top?' top':''}${s?' spf':''}${n.frame&&!n.top?' frm':''}${em?' empty':''}" x="${x-bw/2}" y="${y}" width="${bw}" height="${n.bh}" rx="3"/>`;
     lines.forEach((t,i)=>o+=`<text class="ft-txt${n.top?' b':''}" x="${x}" y="${ty+i*LINE}" text-anchor="middle">${esc(t)}</text>`);
     if(n.tid&&n.k==='gate')o+=`<text class="ft-tid" x="${x+bw/2}" y="${y-4}" text-anchor="end">${n.tid}<title>Transfer ${n.tid}: drawn in full here, and as △ ${n.tid} elsewhere</title></text>`;
+    // a gate with a single input does nothing, so the box connects straight to that input with no gate symbol
+    if(n.k==='gate'&&n.ch.length===1){const c=n.ch[0];o+=`</g><line class="ft-wire" x1="${x}" y1="${y+n.bh}" x2="${x}" y2="${ftY(c)}"/>`;dr(c);return}
     const y0=y+n.bh+4;o+=`<line class="ft-wire" x1="${x}" y1="${y+n.bh}" x2="${x}" y2="${y0}"/>`;
     if(n.k==='gate'){
       o+=n.g!=='AND'?`<path class="ft-gate" d="M${x-15},${y0+24} Q${x-15},${y0+7} ${x},${y0} Q${x+15},${y0+7} ${x+15},${y0+24} Q${x},${y0+16} ${x-15},${y0+24}Z"/>`
@@ -645,6 +647,7 @@ async function ftPptx(){
     slide.addText(n.lines.join('\n'),{shape:SH_.rect,x:X(x-bw/2),y:Y(y),w:u(bw),h:u(n.bh),fontFace:F,fontSize:pt(11),bold:!!n.top,color:C.ink,align:'center',valign:'middle',margin:0,
       fill:{color:n.top?C.accentSoft:s?C.critSoft:fr?C.flowSoft:C.white,transparency:tr},line:{color:n.top?C.accent:s?C.crit:fr?C.flow:C.line,width:stroke(n.top?2:s?1.6:fr?1.5:1),transparency:tr}});
     if(n.tid&&n.k==='gate')txt(n.tid,x+bw/2-40,y-15,40,12,{fontSize:pt(10),bold:true,color:C.flow,align:'right',fontFace:'Courier New'});
+    if(n.k==='gate'&&n.ch.length===1){const c=n.ch[0];wire(x,y+n.bh,x,ftY(c));dr(c);return}
     const y0=y+n.bh+4;wire(x,y+n.bh,x,y0);
     if(n.k==='gate'){
       const sx=u(1),pts=n.g!=='AND'
