@@ -77,6 +77,8 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .insp-row>h2,.insp-row>.note,.insp-row>.derived,.insp-row>.warn,.insp-row>.empty,.insp-row>.row{grid-column:1/-1}
 .insp-row>.derived{margin:-2px 0 0}
 .insp-row>.endset{grid-column:span 2}
+.insp-row>.args{grid-column:1/-1}
+.insp-row .row select{width:auto;flex:0 1 280px}
 @media (max-width:560px){.insp-row>.endset{grid-column:1/-1}}
 .sect{padding:12px 14px;display:flex;flex-direction:column;gap:10px;border-bottom:1px solid var(--line)}
 .sect:last-child{border-bottom:0}
@@ -170,6 +172,9 @@ tr.spf .bar>i{background:var(--critical)}
 .blk .tename{font:600 12.5px var(--f-body);fill:var(--ink)}
 .ft-box.frm{stroke:var(--flow);stroke-width:1.5}
 .ft-box.an{stroke:var(--accent);stroke-width:1.6}
+#ft .ft-item{cursor:pointer}
+#ft .ft-item:hover .ft-box{stroke:var(--flow)}
+#ft .isel .ft-box{stroke:var(--flow);stroke-width:2.6}
 .blk.tgt rect.body{stroke:var(--accent);stroke-width:2.6;stroke-dasharray:6 3}
 .anrow{display:flex;gap:6px;align-items:center}
 .canvas-wrap{position:relative;padding:20px 22px}
@@ -188,6 +193,9 @@ tr.spf .bar>i{background:var(--critical)}
 .arg span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .arg select.own{width:auto;padding:3px 6px;font-size:12px}
 .arg .bt{display:flex;gap:3px}
+.arg .nm{cursor:pointer}
+.arg .nm:hover{color:var(--flow)}
+.arg.isel{border-color:var(--flow);box-shadow:inset 3px 0 0 var(--flow)}
 .arg .bt button{padding:3px 6px}
 .arg small{font:11px var(--f-mono);color:var(--muted);margin-left:4px}
 button.mini{padding:5px 8px;font-size:12px}
@@ -258,11 +266,13 @@ button.on{background:var(--accent);border-color:var(--accent);color:var(--surfac
         <label class="f">Showing<select id="anSel"></select></label>
         <div class="row"><button id="anNew" class="mini" type="button">+ New analysis</button><button id="anDup" class="mini" type="button">Duplicate</button><button id="anDel" class="mini danger" type="button">Delete</button></div>
         <label class="f">Undesired event (top of the fault tree)<input id="topText" type="text"></label>
-        <label class="f">It occurs when<select id="anMode"><option value="any">any of these blocks is lost</option><option value="all">all of these blocks are lost</option><option value="atleast">at least k of these are lost</option><option value="custom" disabled>custom (from an older file)</option></select></label>
+        <label class="f">It occurs when<select id="anMode"><option value="any">any of these occurs (OR)</option><option value="all">all of these occur (AND)</option><option value="atleast">at least k of these occur</option><option value="custom" disabled>custom (from an older file)</option></select></label>
         <label class="f" id="anKWrap">k<input id="anK" class="mono" type="text" inputmode="numeric"></label>
         <label class="f">Include<select id="anScope"><option value="full">everything that stops these blocks working</option><option value="internal">only the blocks' own failures</option><option value="mixed" disabled>a mix (set per block below)</option></select></label>
         <div class="args" id="anTargets"></div>
-        <div class="anrow"><select id="anAdd" aria-label="Add a block to this analysis"></select><button id="anPick" type="button" class="mini">Pick on diagram</button></div>
+        <div class="anrow"><select id="anAdd" aria-label="Add a block or analysis"></select><button id="anPick" type="button" class="mini">Pick on diagram</button></div>
+        <div class="row"><button id="anGrp" type="button" class="mini" title="An intermediate event with its own gate">+ Event group</button><button id="anEv" type="button" class="mini" title="A cause that isn't on the diagram, with its own probability">+ Basic event</button><button id="anUd" type="button" class="mini" title="A cause to break down later, with an estimated probability">+ Undeveloped</button></div>
+        <label class="f">Add to<select id="anTo" aria-label="Where new items go"></select></label>
         <p class="note" id="anNote"></p>
       </div>
       <div class="sect">
@@ -290,7 +300,7 @@ button.on{background:var(--accent);border-color:var(--accent);color:var(--surfac
   <section class="panel">
     <div class="panel-h"><h2>Generated fault tree</h2><div class="toolbar zoombar" aria-label="Zoom"><button id="zOut" type="button" title="Zoom out (Ctrl + wheel)" aria-label="Zoom out">−</button><button id="zFit" type="button" title="Show the whole tree">Fit</button><button id="zIn" type="button" title="Zoom in (Ctrl + wheel)" aria-label="Zoom in">+</button><span class="note" id="zLbl">100%</span></div></div>
     <div class="ft-wrap" id="ftWrap"><svg id="ft" aria-label="Generated fault tree"></svg></div>
-    <div class="hint"><span>△ Tn = same branch as the box tagged Tn, drawn in full elsewhere</span><span>red = single-point failure</span><span data-ccf>dashed = common cause</span><span>blue box = frame</span><span>R×n = repeated event, counted once</span><span>Ctrl + wheel to zoom, drag to pan</span></div>
+    <div class="hint"><span>△ Tn = same branch as the box tagged Tn, drawn in full elsewhere</span><span>red = single-point failure</span><span data-ccf>dashed = common cause</span><span>blue box = frame</span><span>◇ = undeveloped event</span><span>R×n = repeated event, counted once</span><span>click a box from your analysis to edit it</span><span>Ctrl + wheel to zoom, drag to pan</span></div>
   </section>
 
   <div class="cols">
@@ -368,14 +378,37 @@ function depLinks(){const L=[];for(const l of S.links){
   // the top event of the tree is the active analysis
   // a block target set to "own only" is fed by its stand-in '#<id>', which carries the block's own failure and nothing
   // upstream; included analyses keep their own settings
-  for(const x of S.analyses)for(const t of x.targets)L.push({from:t.own&&!t.id.startsWith('@')?'#'+t.id:t.id,to:'@'+x.id,group:t.group});
+  // an analysis is a tree: its items are blocks, other analyses, event groups ('%<uid>', with their own gate) and
+  // standalone or undeveloped events ('$<uid>', with their own probability)
+  for(const x of S.analyses){for(const t of x.targets)L.push({from:srcOf(t),to:'@'+x.id,group:t.group,item:t.uid});
+    walkItems(x.targets,t=>{if(t.kind==='gate')for(const c of t.children)L.push({from:srcOf(c),to:'%'+t.uid,group:t.mode==='any'?'':'G',item:c.uid})})}
   const a=act();if(a)L.push({from:'@'+a.id,to:TOP,group:''});return L}
 const AN=id=>S.analyses.find(a=>'@'+a.id===id);
+/* ---------- analysis trees ----------
+   item kinds: block {id, own}, analysis {id:'@<id>'}, event group {kind:'gate', label, mode, k, children},
+   basic event {kind:'event', label, p}, undeveloped event {kind:'undev', label, p}. Every item has a uid. */
+const isBlk=t=>!t.kind&&!String(t.id).startsWith('@'),isAnRef=t=>!t.kind&&String(t.id).startsWith('@');
+const srcOf=t=>t.kind==='gate'?'%'+t.uid:t.kind?'$'+t.uid:isAnRef(t)?t.id:t.own?'#'+t.id:t.id;
+function walkItems(list,fn,parent=null){for(const t of list){fn(t,parent,list);if(t.kind==='gate')walkItems(t.children,fn,t)}}
+function itemMap(){const m=new Map();for(const a of S.analyses)walkItems(a.targets,(t,p,list)=>m.set(t.uid,{t,parent:p,list,a}));return m}
+function gateOf(u){let r=null;for(const a of S.analyses)walkItems(a.targets,t=>{if(t.uid===u)r=t});return r}
+function itemName(t){return t.kind?t.label||'Untitled':isAnRef(t)?AN(t.id)?.name||'Untitled':S.blocks.find(b=>b.id===t.id)?.name||t.id}
 function groupSize(to,g){return depLinks().filter(l=>l.to===to&&l.group===g).length}
-function voteK(to,g,n){const a=AN(to),k=Math.round(+(a?(a.vote||{})[g]:(S.vote||{})[vkey(to,g)]));return k>=1&&k<=n?k:n}
+function voteK(to,g,n){let k;if(to.startsWith('%')){const t=gateOf(to.slice(1));k=t&&t.mode==='atleast'?t.k:n}
+  else{const a=AN(to);k=a?(a.vote||{})[g]:(S.vote||{})[vkey(to,g)]}k=Math.round(+k);return k>=1&&k<=n?k:n}
 // does analysis a include analysis b, directly or through other analyses?
-function includes(a,b,seen=new Set()){if(seen.has(a.id))return false;seen.add(a.id);
-  return a.targets.some(t=>t.id==='@'+b.id||(AN(t.id)&&includes(AN(t.id),b,seen)))}
+function includes(a,b,seen=new Set()){if(seen.has(a.id))return false;seen.add(a.id);const refs=[];walkItems(a.targets,t=>{if(isAnRef(t))refs.push(t.id)});
+  return refs.some(id=>id==='@'+b.id||(AN(id)&&includes(AN(id),b,seen)))}
+// a list of analysis items: unknown blocks are dropped, a block or analysis appears once per list, and every uid is
+// unique across the project (copies get new ones)
+function normItems(list,ids,uids,ownDefault){const seen=new Set(),out=[];
+  for(const t of Array.isArray(list)?list:[]){if(!t||typeof t!=='object')continue;let u=typeof t.uid==='string'&&t.uid?t.uid:uid();while(uids.has(u))u=uid();
+    let n;if(t.kind==='gate')n={uid:u,kind:'gate',label:String(t.label||'Untitled event'),mode:['any','all','atleast'].includes(t.mode)?t.mode:'any',k:Math.max(1,Math.round(+t.k||2)),group:String(t.group||''),children:null};
+    else if(t.kind==='event'||t.kind==='undev')n={uid:u,kind:t.kind,label:String(t.label||'Untitled event'),p:clamp(+t.p||0,0,1),group:String(t.group||'')};
+    else{const id=String(t.id||'');if(!(ids.has(id)||id.startsWith('@'))||seen.has(id))continue;seen.add(id);
+      n={uid:u,id,group:String(t.group||''),own:!id.startsWith('@')&&(t.own!=null?!!t.own:!!ownDefault)}}
+    uids.add(u);if(n.kind==='gate')n.children=normItems(t.children,ids,uids,false);out.push(n)}
+  return out}
 function normalize(s){
   if(!s||!Array.isArray(s.blocks)||!Array.isArray(s.links))throw new Error('missing blocks or links');
   s.ccf=s.ccf&&typeof s.ccf==='object'?s.ccf:{};s.ccfOn=typeof s.ccfOn==='boolean'?s.ccfOn:s.blocks.some(b=>String(b.ccf||'').trim());s.vote=s.vote&&typeof s.vote==='object'?s.vote:{};s.T=+s.T>0?+s.T:1;s.topText=String(s.topText||'');
@@ -406,9 +439,12 @@ function normalize(s){
       o.needB=ok(l.needB)?l.needB:o.group?'grp':'req';o.needA=ok(l.needA)?l.needA:'req';
       if(o.needB==='grp'&&!o.group)o.needB='req';if(o.needA==='grp'&&!o.groupA)o.needA='req';
       if(o.needB!=='grp')o.group='';if(o.needA!=='grp')o.groupA='';return o});
-  s.analyses=s.analyses.map(a=>{const seen=new Set();return{id:a.id||uid(),name:String(a.name||'Top event'),mode:['any','all','atleast'].includes(a.mode)?a.mode:undefined,lastScope:a.lastScope==='internal'||a.scope==='internal'?'internal':undefined,vote:a.vote&&typeof a.vote==='object'?a.vote:{},
-    targets:(Array.isArray(a.targets)?a.targets:[]).filter(t=>t&&(ids.has(t.id)||String(t.id).startsWith('@'))&&!seen.has(t.id)&&seen.add(t.id)).map(t=>({id:t.id,group:String(t.group||''),own:t.own!=null?!!t.own:a.scope==='internal'&&!String(t.id).startsWith('@')}))}});
-  {const aids=new Set(s.analyses.map(a=>'@'+a.id));for(const a of s.analyses)a.targets=a.targets.filter(t=>!t.id.startsWith('@')||(aids.has(t.id)&&t.id!=='@'+a.id))}
+  const uids=new Set();
+  s.analyses=s.analyses.map(a=>{return{id:a.id||uid(),name:String(a.name||'Top event'),mode:['any','all','atleast'].includes(a.mode)?a.mode:undefined,lastScope:a.lastScope==='internal'||a.scope==='internal'?'internal':undefined,vote:a.vote&&typeof a.vote==='object'?a.vote:{},
+    targets:normItems(a.targets,ids,uids,a.scope==='internal')}});
+  {const aids=new Set(s.analyses.map(a=>'@'+a.id));
+    const keep=(list,a)=>list.filter(t=>!isAnRef(t)||(aids.has(t.id)&&t.id!=='@'+a.id)).map(t=>t.kind==='gate'?{...t,children:keep(t.children,a)}:t);
+    for(const a of s.analyses)a.targets=keep(a.targets,a)}
   // one shared group is the simple "all of" / "at least k of" case, which the panel calls Targets
   for(const a of s.analyses){const g=new Set(a.targets.map(t=>t.group));
     if(g.size===1&&!g.has('')&&!g.has('Targets')){const G=[...g][0];a.targets.forEach(t=>t.group='Targets');a.vote=a.vote[G]!=null?{Targets:a.vote[G]}:{}}}
@@ -422,7 +458,7 @@ let S,oldSave=false;
 // undo history: snapshots of the project; a burst of edits (typing in a field, one drag) settles into one step
 const hist={undo:[],redo:[],cur:null,t:null};
 try{const raw=JSON.parse(localStorage.getItem(KEY));oldSave=!!raw&&!raw.vote;S=normalize(raw)}catch(e){S=normalize(example())}
-let sel=null,connect=false,pending=null,drag=null,clip=null,picking=false;
+let sel=null,connect=false,pending=null,drag=null,clip=null,picking=false,addTo=null;
 const mT=()=>S.T>0?S.T:1;
 const pb=b=>b.mode==='prob'?b.v:1-Math.exp(-b.v*mT());
 function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}clearTimeout(hist.t);hist.t=setTimeout(commit,500)}
@@ -434,11 +470,13 @@ function step(back){
   if(drag)return;commit();const from=back?hist.undo:hist.redo,to=back?hist.redo:hist.undo;
   if(!from.length){status(back?'Nothing to undo':'Nothing to redo');return}
   to.push(hist.cur);hist.cur=from.pop();S=normalize(JSON.parse(hist.cur));
-  const m=byId();if(sel&&!(sel.t==='b'?m[sel.id]:sel.t==='l'?S.links.find(l=>l.id===sel.id):S.frames.find(f=>f.id===sel.id)))sel=null;
+  const m=byId();if(sel&&!(sel.t==='i'?itemMap().has(sel.uid):sel.t==='b'?m[sel.id]:sel.t==='l'?S.links.find(l=>l.id===sel.id):S.frames.find(f=>f.id===sel.id)))sel=null;
   connect=false;pending=null;refresh(true);
   clearTimeout(hist.t);hist.t=null;hist.cur=JSON.stringify(S);undoBtns();status(back?'Undone':'Redone')}
 // block lookup for the analysis also knows the virtual top event, which sits outside every frame
-const byId=()=>{const m=Object.fromEntries(S.blocks.map(b=>[b.id,b]));for(const b of S.blocks)m['#'+b.id]={...b,id:'#'+b.id,kind:'int'};for(const a of S.analyses)m['@'+a.id]={id:'@'+a.id,kind:'an',name:a.name||'Untitled',x:-1e6,y:-1e6};
+const byId=()=>{const m=Object.fromEntries(S.blocks.map(b=>[b.id,b]));for(const b of S.blocks)m['#'+b.id]={...b,id:'#'+b.id,kind:'int'};for(const a of S.analyses){m['@'+a.id]={id:'@'+a.id,kind:'an',name:a.name||'Untitled',x:-1e6,y:-1e6};
+    walkItems(a.targets,t=>{if(t.kind==='gate')m['%'+t.uid]={id:'%'+t.uid,kind:'grp',name:t.label||'Untitled event',x:-1e6,y:-1e6};
+      else if(t.kind)m['$'+t.uid]={id:'$'+t.uid,kind:'ext',name:t.label||'Untitled event',undev:t.kind==='undev',x:-1e6,y:-1e6}})}
   m[TOP]={id:TOP,kind:'top',name:act()?.name||'Top event',x:-1e6,y:-1e6};return m};
 function setTopName(t){const a=act();if(a)a.name=t;S.topText=t}
 function status(msg,err){const el=$('status');el.textContent=msg;el.classList.toggle('err',!!err)}
@@ -583,7 +621,10 @@ function renderFrames(){let F='',T='';tagRects=[];
   $('ibdFrames').innerHTML=F;$('ibdTags').innerHTML=T}
 function framePText(f){const fp=f&&frameP.get(f.id);if(!fp)return'Put blocks inside the frame to calculate it.';
   return`P = ${fmt(fp.p)} per ${mT()} h mission: ${f.lost==='any'?'any':'all'} of its output${fp.outs.length>1?'s':''} (${fp.outs.join(', ')}) lost, counting only failures of the ${fp.n} block${fp.n>1?'s':''} inside. Blocks outside are taken as working.`}
+// a selected block item in an analysis also highlights its block on the diagram
+let selItemBlock=null;
 function renderIBD(){
+  {const x=sel&&sel.t==='i'&&itemMap().get(sel.uid);selItemBlock=x&&isBlk(x.t)?x.t.id:null}
   sizeCanvas();
   const m=byId(),R=routes();
   let F='';
@@ -597,8 +638,8 @@ function renderIBD(){
   $('ibdLinks').innerHTML=L;
   let B='';
   for(const b of S.blocks){
-    const cls=['blk'];if(sel&&sel.t==='b'&&sel.id===b.id)cls.push('sel');if(pending===b.id)cls.push('pending');
-    if(picking&&act().targets.some(t=>t.id===b.id))cls.push('tgt');
+    const cls=['blk'];if(sel&&sel.t==='b'&&sel.id===b.id)cls.push('sel');if(selItemBlock===b.id)cls.push('sel');if(pending===b.id)cls.push('pending');
+    if(picking&&listOf(container()).some(t=>!t.kind&&t.id===b.id))cls.push('tgt');
     const LB=layoutBlock(b),nl=LB.lines.length;
     B+=`<g class="${cls.join(' ')}" data-block="${b.id}" transform="translate(${b.x},${b.y})"><rect class="body" width="${LB.w}" height="${LB.h}" rx="4"/>`+
       `<text class="stereo" x="8" y="13">«${esc(b.st||'part')}»</text>${LB.lines.map((t,i)=>`<text class="name" x="8" y="${30+15*i}">${esc(t)}</text>`).join('')}${S.showData?`<text class="rate" x="8" y="${46+15*(nl-1)}">${esc(rateText(b))}</text>`:''}`+
@@ -670,46 +711,93 @@ function setMode(a,mode,k){const n=a.targets.length;a.mode=mode;
   if(mode==='any'){a.targets.forEach(t=>t.group='');a.vote={}}
   else{a.targets.forEach(t=>t.group='Targets');a.vote=mode==='atleast'?{Targets:Math.min(Math.max(1,k|0||1),Math.max(1,n))}:{}}}
 // Include, worked out from the rows: every block own-only, none, or a mix
-function scopeOf(a){const bl=a.targets.filter(t=>!t.id.startsWith('@'));return!bl.length?(a.lastScope||'full'):bl.every(t=>t.own)?'internal':bl.some(t=>t.own)?'mixed':'full'}
-function toggleTarget(id){const a=act(),i=a.targets.findIndex(t=>t.id===id),mode=modeOf(a),k=kOf(a,'Targets',a.targets.length);
-  if(i>=0)a.targets.splice(i,1);else a.targets.push({id,group:'',own:!id.startsWith('@')&&scopeOf(a)==='internal'});
-  setMode(a,mode==='custom'?'any':mode,k);refresh(true)}
+function blocksIn(a){const r=[];walkItems(a.targets,t=>{if(isBlk(t))r.push(t)});return r}
+function scopeOf(a){const bl=blocksIn(a);return!bl.length?(a.lastScope||'full'):bl.every(t=>t.own)?'internal':bl.some(t=>t.own)?'mixed':'full'}
+// where new items go: into the selected event group, otherwise directly under the top event
+// where the Analysis panel adds new items: the event group chosen in "Add to", or directly under the top event.
+// Selecting or creating an item never changes it, so a new group doesn't swallow the next item.
+function container(){const x=addTo&&itemMap().get(addTo);if(x&&x.a===act()&&x.t.kind==='gate')return x.t;addTo=null;return null}
+const listOf=g=>g?g.children:act().targets;
+// keep the top-level groups in step with the analysis mode after the list changes
+function settle(list){const a=act();if(list===a.targets){const mode=modeOf(a),k=kOf(a,'Targets',a.targets.length);setMode(a,mode==='custom'?'any':mode,k)}}
+function addItem(t,g=container()){const list=listOf(g);t.uid=uid();t.group=t.group||'';list.push(t);settle(list);sel={t:'i',uid:t.uid};refresh(true);return t}
+function toggleTarget(id,g=container()){const a=act(),list=listOf(g),i=list.findIndex(t=>!t.kind&&t.id===id);
+  if(i>=0){list.splice(i,1);settle(list);refresh(true)}else addItem({id,group:'',own:!id.startsWith('@')&&scopeOf(a)==='internal'},g)}
+function removeItem(u){const x=itemMap().get(u);if(!x)return;x.list.splice(x.list.indexOf(x.t),1);if(x.a===act())settle(x.list);
+  if(sel&&sel.t==='i'&&(sel.uid===u||!itemMap().has(sel.uid)))sel=x.parent?{t:'i',uid:x.parent.uid}:null;refresh(true)}
+function moveItem(u,d){const x=itemMap().get(u);if(!x)return false;const i=x.list.indexOf(x.t),j=i+d;if(j<0||j>=x.list.length)return false;
+  [x.list[i],x.list[j]]=[x.list[j],x.list[i]];refresh(true);return true}
+// replace a block with one level of its causes from the diagram: its own failure, plus each input or redundancy group
+function develop(u){const x=itemMap().get(u);if(!x||!isBlk(x.t))return;const t=x.t,b=S.blocks.find(o=>o.id===t.id);
+  if(t.own){status('Own only has nothing beneath it to develop. Set it to Everything first.',true);return}
+  const ins=(inputsOf().get(t.id)||[]).filter(l=>S.blocks.some(o=>o.id===l.from));
+  if(!ins.length){status(`${b.name} has no inputs, so it's already a basic event.`,true);return}
+  const kids=[{uid:uid(),id:t.id,group:'',own:true}],seen=new Set([t.id+'#own']),groups=new Map();
+  for(const l of ins){if(!l.group){if(!seen.has(l.from)){seen.add(l.from);kids.push({uid:uid(),id:l.from,group:'',own:false})}}
+    else{if(!groups.has(l.group))groups.set(l.group,[]);if(!groups.get(l.group).includes(l.from))groups.get(l.group).push(l.from)}}
+  for(const[g,mem]of groups){const n=mem.length,k=voteK(t.id,g,n);
+    kids.push(n===1?{uid:uid(),id:mem[0],group:'',own:false}:{uid:uid(),kind:'gate',label:k>=n?`All ${g} inputs lost`:k===1?`Any ${g} input lost`:`${k} or more of ${n} ${g} inputs lost`,
+      mode:k>=n?'all':k===1?'any':'atleast',k,group:'',children:mem.map(id=>({uid:uid(),id,group:'',own:false}))})}
+  const gt={uid:t.uid,kind:'gate',label:`${b.name} output lost`,mode:'any',k:2,group:t.group,children:kids};
+  x.list[x.list.indexOf(t)]=gt;sel={t:'i',uid:gt.uid};refresh(true);
+  status(`Developed ${b.name} one level: its own failure plus ${kids.length-1} input${kids.length>2?'s':''}. The result is unchanged; edit, regroup or develop further.`)}
 const byName=list=>list.slice().sort((p,q)=>(p.name||'').localeCompare(q.name||'',undefined,{numeric:true,sensitivity:'base'}));
+// one row per item, nested under its event group; used by the Analysis panel and the item editor
+const KIND_ICON={gate:'⬠',event:'○',undev:'◇'};
+function rowsHTML(list,depth){return list.map((t,i)=>{const nm=itemName(t),sl=sel&&sel.t==='i'&&sel.uid===t.uid;
+  const info=t.kind==='gate'?`${t.mode==='atleast'?`${Math.min(t.k,t.children.length||t.k)} of ${t.children.length}`:t.mode} · ${t.children.length}`:t.kind?fmt(t.p):isAnRef(t)?'analysis':'';
+  return`<div class="arg item${sl?' isel':''}" style="margin-left:${depth*14}px"><span class="nm" data-pick="${t.uid}" title="${esc(nm)}">${t.kind?KIND_ICON[t.kind]+' ':isAnRef(t)?'▣ ':''}${esc(nm)}${info?` <small>${esc(info)}</small>`:''}</span>`+
+    (isBlk(t)?`<select class="mini own" data-own="${t.uid}" aria-label="What counts for ${esc(nm)}"><option value="0"${t.own?'':' selected'}>Everything</option><option value="1"${t.own?' selected':''}>Own only</option></select>`:'<span></span>')+
+    `<span class="bt"><button class="mini" type="button" data-move="${t.uid}" data-d="-1" aria-label="Move ${esc(nm)} up"${i?'':' disabled'}>↑</button><button class="mini" type="button" data-move="${t.uid}" data-d="1" aria-label="Move ${esc(nm)} down"${i<list.length-1?'':' disabled'}>↓</button><button class="mini danger" type="button" data-remove="${t.uid}" aria-label="Remove ${esc(nm)}">✕</button></span></div>`+
+    (t.kind==='gate'?(rowsHTML(t.children,depth+1)||`<p class="empty" style="margin-left:${(depth+1)*14}px">No causes yet</p>`):'')}).join('')}
+// shared handlers for item rows, wherever they appear
+function itemClick(e){const r=e.target.closest('[data-remove]');if(r){removeItem(r.dataset.remove);return true}
+  const mv=e.target.closest('[data-move]');if(mv){const u=mv.dataset.move,d=+mv.dataset.d;if(moveItem(u,d)){
+      const nb=[...document.querySelectorAll(`[data-move="${u}"]`)].sort((p,q)=>(q.dataset.d===mv.dataset.d)-(p.dataset.d===mv.dataset.d)).find(x=>!x.disabled&&x.closest('#anTargets')===mv.closest('#anTargets'));if(nb)nb.focus()}return true}
+  const pk=e.target.closest('[data-pick]');if(pk){selectItem(pk.dataset.pick);return true}return false}
+function itemChange(e){const x=e.target.closest('[data-own]');if(!x)return;const it=itemMap().get(x.dataset.own);if(it){it.t.own=x.value==='1';refresh(true)}}
+function selectItem(u){sel={t:'i',uid:u};connect=false;pending=null;refresh(true)}
 function renderAnalysis(){const a=act(),m=byId(),mode=modeOf(a),n=a.targets.length;
   $('anSel').innerHTML=byName(S.analyses).map(x=>`<option value="${x.id}"${x.id===a.id?' selected':''}>${esc(x.name||'Untitled')}</option>`).join('');
   if(document.activeElement!==$('topText'))$('topText').value=a.name;
   $('anMode').value=mode;$('anScope').value=scopeOf(a);$('anKWrap').hidden=mode!=='atleast';$('anK').closest('label').firstChild.textContent=`k (1 to ${Math.max(1,n)})`;
   if(document.activeElement!==$('anK'))$('anK').value=kOf(a,'Targets',n);
-  $('anTargets').innerHTML=a.targets.map((t,i)=>`<div class="arg"><span title="${esc(m[t.id]?.name||t.id)}">${t.id.startsWith('@')?'▣ ':''}${esc(m[t.id]?.name||t.id)}${t.id.startsWith('@')?' <small>analysis</small>':''}</span>${t.id.startsWith('@')?'<span></span>':`<select class="mini own" data-own="${t.id}" aria-label="What counts for ${esc(m[t.id]?.name||'')}"><option value="0"${t.own?'':' selected'}>Everything</option><option value="1"${t.own?' selected':''}>Own only</option></select>`}<span class="bt"><button class="mini" type="button" data-move="${i}" data-d="-1" aria-label="Move ${esc(m[t.id]?.name||'')} up"${i?'':' disabled'}>↑</button><button class="mini" type="button" data-move="${i}" data-d="1" aria-label="Move ${esc(m[t.id]?.name||'')} down"${i<a.targets.length-1?'':' disabled'}>↓</button><button class="mini danger" type="button" data-untarget="${t.id}" aria-label="Remove ${esc(m[t.id]?.name||'')}">✕</button></span></div>`).join('')||'<p class="empty">No blocks yet. Add the blocks whose loss causes this event.</p>';
-  const rest=S.blocks.filter(b=>!a.targets.some(t=>t.id===b.id));
+  $('anTargets').innerHTML=rowsHTML(a.targets,0)||'<p class="empty">Nothing yet. Add the blocks, events or analyses that cause this event.</p>';
+  const g=container(),list=listOf(g);
+  const gs=[];walkItems(a.targets,(t,p)=>{if(t.kind==='gate'){let d=0;for(let q=p;q;q=itemMap().get(q.uid)?.parent)d++;gs.push({t,d})}});
+  $('anTo').innerHTML=`<option value=>Top event: ${esc(a.name)}</option>`+gs.map(({t,d})=>`<option value="${t.uid}"${t===g?' selected':''}>${'\u2003'.repeat(d+1)}⬠ ${esc(t.label)}</option>`).join('');$('anTo').disabled=!gs.length;
+  const rest=S.blocks.filter(b=>!list.some(t=>!t.kind&&t.id===b.id));
   // another analysis can be included unless that would make a loop of analyses
-  const anals=byName(S.analyses.filter(x=>x!==a&&!a.targets.some(t=>t.id==='@'+x.id)&&!includes(x,a)));
+  const anals=byName(S.analyses.filter(x=>x!==a&&!list.some(t=>t.id==='@'+x.id)&&!includes(x,a)));
   $('anAdd').innerHTML=`<option value="">+ Add a block or analysis…</option>`+(rest.length?`<optgroup label="Blocks">${rest.map(b=>`<option value="${b.id}">${esc(b.name)}</option>`).join('')}</optgroup>`:'')+
     (anals.length?`<optgroup label="Other analyses">${anals.map(x=>`<option value="@${x.id}">▣ ${esc(x.name||'Untitled')}</option>`).join('')}</optgroup>`:'');
   $('anPick').textContent=picking?'Done':'Pick on diagram';$('anPick').classList.toggle('on',picking);$('anDel').disabled=S.analyses.length<2;
   $('anNote').textContent=mode==='custom'?'This analysis came from an older file with mixed logic. Choosing a mode above replaces it.'
     :n?`${S.analyses.length} analys${S.analyses.length>1?'es':'is'} in this project. The diagram is the same for all of them; only the fault tree changes.`
     :'Each analysis asks: which blocks must lose their output for this event to happen? It can also include other analyses.'}
-$('anTargets').addEventListener('click',e=>{const b=e.target.closest('[data-untarget]');if(b){toggleTarget(b.dataset.untarget);return}
-  const mv=e.target.closest('[data-move]');if(!mv)return;const T=act().targets,i=+mv.dataset.move,j=i+(+mv.dataset.d);if(j<0||j>=T.length)return;
-  [T[i],T[j]]=[T[j],T[i]];refresh(true);
-  // keep the focus on the moved row's button, so it can be moved again from the keyboard
-  const nb=[...document.querySelectorAll(`#anTargets [data-move="${j}"]`)].sort((p,q)=>(q.dataset.d===mv.dataset.d)-(p.dataset.d===mv.dataset.d)).find(x=>!x.disabled);if(nb)nb.focus()});
-$('anTargets').addEventListener('change',e=>{const x=e.target.closest('[data-own]');if(!x)return;const t=act().targets.find(t=>t.id===x.dataset.own);if(t){t.own=x.value==='1';refresh(true)}});
+$('anTargets').addEventListener('click',itemClick);
+$('anTargets').addEventListener('change',itemChange);
 $('anAdd').onchange=e=>{if(e.target.value)toggleTarget(e.target.value)};
-$('anScope').onchange=e=>{const a=act(),v=e.target.value;a.lastScope=v;for(const t of a.targets)if(!t.id.startsWith('@'))t.own=v==='internal';refresh(true);
+// new groups are numbered within the analysis: Event group 1, 2, …
+function nextGroupName(){let n=0;walkItems(act().targets,t=>{if(t.kind==='gate')n++});return'Event group '+(n+1)}
+$('anGrp').onclick=()=>{const g=container(),t=addItem({kind:'gate',label:nextGroupName(),mode:'any',k:2,children:[]});
+  status(`${t.label} added ${g?'inside '+g.label:'under the top event'}. Name it and add its causes in the editor below the canvas; the panel keeps adding to ${g?g.label:'the top event'}.`)};
+$('anEv').onclick=()=>{addItem({kind:'event',label:'New basic event',p:1e-4});status('Basic event added. Name it and set its probability.')};
+$('anUd').onclick=()=>{addItem({kind:'undev',label:'Undeveloped event',p:1e-4});status('Undeveloped event added. Give it an estimated probability; you can replace it with an event group later.')};
+$('anScope').onchange=e=>{const a=act(),v=e.target.value;a.lastScope=v;for(const t of blocksIn(a))t.own=v==='internal';refresh(true);
   status(e.target.value==='internal'?'Internal failures only: the blocks\' inputs, such as power or data, are ignored in this analysis.':'Including everything upstream of the blocks.')};
 $('anMode').onchange=e=>{const a=act(),n=a.targets.length,was=modeOf(a);
   setMode(a,e.target.value,was==='atleast'?+$('anK').value:(n>2?2:1));refresh(true)};
 $('anK').oninput=e=>{const a=act(),n=a.targets.length,v=+e.target.value,ok=Number.isInteger(v)&&v>=1&&v<=n;e.target.classList.toggle('bad',!ok);
   if(ok){a.vote={Targets:v};a.mode='atleast';refresh(false)}};
-$('anSel').onchange=e=>{S.active=e.target.value;S.topText=act().name;picking=false;refresh(true)};
+$('anSel').onchange=e=>{S.active=e.target.value;S.topText=act().name;picking=false;addTo=null;if(sel&&sel.t==='i')sel=null;refresh(true)};
+$('anTo').onchange=e=>{addTo=e.target.value||null;refresh(true);status(addTo?`New items now go into ${itemName(itemMap().get(addTo).t)}.`:'New items now go directly under the top event.')};
 $('anNew').onclick=()=>{const a={id:uid(),name:'New analysis',targets:[],vote:{}};S.analyses.push(a);S.active=a.id;S.topText=a.name;refresh(true);
   $('topText').focus();$('topText').select();status('New analysis. Name the undesired event, then add the blocks that cause it.')};
-$('anDup').onclick=()=>{const a=JSON.parse(JSON.stringify(act()));a.id=uid();a.name+=' (copy)';S.analyses.push(a);S.active=a.id;S.topText=a.name;refresh(true)};
+$('anDup').onclick=()=>{const a=JSON.parse(JSON.stringify(act()));a.id=uid();a.name+=' (copy)';walkItems(a.targets,t=>{t.uid=uid()});S.analyses.push(a);S.active=a.id;S.topText=a.name;refresh(true)};
 $('anDel').onclick=()=>{if(S.analyses.length<2)return;const n=act().name,gone='@'+S.active;S.analyses=S.analyses.filter(a=>a.id!==S.active);dropTargets(new Set([gone]));S.active=S.analyses[0].id;S.topText=act().name;picking=false;
   refresh(true);status(`Deleted analysis "${n}". Ctrl+Z brings it back.`)};
-$('anPick').onclick=()=>{picking=!picking;connect=false;pending=null;refresh(true);if(picking)status('Tap blocks on the diagram to add or remove them.')};
+$('anPick').onclick=()=>{picking=!picking;if(picking&&sel&&sel.t!=='i')sel=null;connect=false;pending=null;refresh(true);if(picking)status('Tap blocks on the diagram to add or remove them.')};
 $('showData').onchange=e=>{S.showData=e.target.checked;refresh(false)};
 function renderTop(){renderAnalysis();$('missionT').value=S.T;$('showData').checked=S.showData;
   const on=ccfOn(),kept=S.blocks.filter(b=>b.ccf&&!isTop(b)).length;$('ccfOn').checked=on;
@@ -727,7 +815,49 @@ function repNote(b){
 }
 function renderInsp(){
   const el=$('insp'),m=byId();
-  if(false){
+  if(sel&&sel.t==='i'&&itemMap().has(sel.uid)){const x=itemMap().get(sel.uid),t=x.t,nm=itemName(t),A=analyze();
+    const pOf=src=>A.St?A.St.P(A.St.F(src)):null,P=t.kind==='event'||t.kind==='undev'?t.p:pOf(srcOf(t));
+    const kind=t.kind==='gate'?'Event group':t.kind==='event'?'Basic event':t.kind==='undev'?'Undeveloped event':isAnRef(t)?'Included analysis':'Block in analysis';
+    const where=`<p class="note">${kind} in <b>${esc(x.parent?x.parent.label:x.a.name)}</b>${x.parent?'':' (the top event)'}, analysis “${esc(x.a.name)}”. P = ${P==null?'—':fmt(P)}.</p>`;
+    let body='';
+    if(t.kind==='gate'){const n=t.children.length,g=t;
+      const rest=S.blocks.filter(b=>!g.children.some(c=>!c.kind&&c.id===b.id)),anals=byName(S.analyses.filter(a=>a!==x.a&&!g.children.some(c=>c.id==='@'+a.id)&&!includes(a,x.a)));
+      body=`<label class="f">Description<input id="iLab" type="text" value="${esc(t.label)}"></label>
+        <label class="f">Occurs when<select id="iGMode"><option value="any"${t.mode==='any'?' selected':''}>any of its causes occurs (OR)</option><option value="all"${t.mode==='all'?' selected':''}>all of its causes occur (AND)</option><option value="atleast"${t.mode==='atleast'?' selected':''}>at least k of its causes occur</option></select></label>
+        ${t.mode==='atleast'?`<label class="f">k (1 to ${Math.max(1,n)})<input id="iGK" class="mono" type="text" inputmode="numeric" value="${Math.min(t.k,Math.max(1,n))}"></label>`:''}
+        <h2>Causes (${n})</h2><div class="args edrows">${rowsHTML(t.children,0)||'<p class="empty">No causes yet. Add them below.</p>'}</div>
+        <div class="row"><select id="iAdd" class="mini" aria-label="Add a block or analysis to this event group"><option value="">+ Add a block or analysis…</option>${rest.length?`<optgroup label="Blocks">${rest.map(b=>`<option value="${b.id}">${esc(b.name)}</option>`).join('')}</optgroup>`:''}${anals.length?`<optgroup label="Other analyses">${anals.map(a=>`<option value="@${a.id}">▣ ${esc(a.name)}</option>`).join('')}</optgroup>`:''}</select>
+          <button id="iAddGrp" class="mini" type="button">+ Event group</button><button id="iAddEv" class="mini" type="button">+ Basic event</button><button id="iAddUd" class="mini" type="button">+ Undeveloped</button></div>`}
+    else if(t.kind){body=`<label class="f">Description<input id="iLab" type="text" value="${esc(t.label)}"></label>
+        <label class="f">Type<select id="iKind"><option value="event"${t.kind==='event'?' selected':''}>Basic event (fully defined)</option><option value="undev"${t.kind==='undev'?' selected':''}>Undeveloped event (◇, to break down later)</option></select></label>
+        <label class="f">Probability per mission (0 to 1)<input id="iEP" class="mono" type="text" inputmode="decimal" value="${t.p}"></label>
+        <div class="row"><button id="iToGrp" type="button">Develop into an event group</button></div>
+        <p class="note">Use events for causes that aren't on the diagram, such as a software fault, operator error or interference. Each is one basic event, counted once wherever it appears.</p>`}
+    else if(isAnRef(t))body=`<div class="row"><button id="iShowA" type="button">Show “${esc(nm)}”</button></div><p class="note">An included analysis keeps its own settings. Edit it by showing it.</p>`;
+    else{const hasIn=(inputsOf().get(t.id)||[]).some(l=>S.blocks.some(o=>o.id===l.from));
+      body=`<label class="f">What counts<select id="iOwn"><option value="0"${t.own?'':' selected'}>Everything that stops ${esc(nm)} working</option><option value="1"${t.own?' selected':''}>Only ${esc(nm)}'s own failure</option></select></label>
+        <div class="row"><button id="iDev" type="button"${t.own||!hasIn?' disabled':''}>Develop one level</button><button id="iSelB" type="button">Select on diagram</button></div>
+        <p class="note">${t.own?'Own only has nothing beneath it to develop.':!hasIn?`${esc(nm)} has no inputs, so it's already a basic event.`:`Develop replaces this block with an event group of its causes from the diagram: its own failure plus each input or redundancy group. The result is unchanged, and you can then edit, regroup or develop further.`}</p>`}
+    el.innerHTML=`<h2>${esc(kind)} · ${esc(nm)}</h2>${where}${body}<div class="row">${x.parent?`<button id="iParent" type="button">Select ${esc(x.parent.label)}</button>`:''}<button id="iRemove" type="button" class="danger">Remove from analysis</button></div>`;
+    const ed=el.querySelector('.edrows');if(ed){ed.addEventListener('click',itemClick);ed.addEventListener('change',itemChange)}
+    if($('iLab'))$('iLab').oninput=e=>{t.label=e.target.value;renderAnalysis();renderResults();save()};
+    if($('iGMode'))$('iGMode').onchange=e=>{t.mode=e.target.value;if(t.mode==='atleast')t.k=Math.min(Math.max(1,t.k||2),Math.max(1,t.children.length));refresh(true)};
+    if($('iGK'))$('iGK').oninput=e=>{const v=+e.target.value,ok=Number.isInteger(v)&&v>=1&&v<=t.children.length;e.target.classList.toggle('bad',!ok);if(ok){t.k=v;renderAnalysis();renderResults();save()}};
+    if($('iAdd'))$('iAdd').onchange=e=>{if(e.target.value)toggleTarget(e.target.value,t)};
+    if($('iAddGrp'))$('iAddGrp').onclick=()=>addItem({kind:'gate',label:nextGroupName(),mode:'any',k:2,children:[]},t);
+    if($('iAddEv'))$('iAddEv').onclick=()=>addItem({kind:'event',label:'New basic event',p:1e-4},t);
+    if($('iAddUd'))$('iAddUd').onclick=()=>addItem({kind:'undev',label:'Undeveloped event',p:1e-4},t);
+    if($('iKind'))$('iKind').onchange=e=>{t.kind=e.target.value;refresh(true)};
+    if($('iEP'))$('iEP').oninput=e=>{const v=parseFloat(e.target.value.replace('−','-')),ok=v>=0&&v<=1&&isFinite(v);e.target.classList.toggle('bad',!ok);if(ok){t.p=v;renderAnalysis();renderResults();save()}};
+    if($('iToGrp'))$('iToGrp').onclick=()=>{const g={uid:t.uid,kind:'gate',label:t.label,mode:'any',k:2,group:t.group,children:[]};x.list[x.list.indexOf(t)]=g;refresh(true);
+      status('Now an event group with the same description. Add its causes; until then it never occurs.')};
+    if($('iShowA'))$('iShowA').onclick=()=>{S.active=t.id.slice(1);S.topText=act().name;sel=null;refresh(true)};
+    if($('iOwn'))$('iOwn').onchange=e=>{t.own=e.target.value==='1';refresh(true)};
+    if($('iDev'))$('iDev').onclick=()=>develop(t.uid);
+    if($('iSelB'))$('iSelB').onclick=()=>{sel={t:'b',id:t.id};refresh(true)};
+    if($('iParent'))$('iParent').onclick=()=>selectItem(x.parent.uid);
+    $('iRemove').onclick=()=>removeItem(t.uid);
+  }else if(false){
   }else if(sel&&sel.t==='b'&&m[sel.id]){const b=m[sel.id];
     el.innerHTML=`<h2>Block</h2><label class="f">Name<input id="iName" type="text" value="${esc(b.name)}"></label>
       <label class="f">Stereotype<input id="iSt" type="text" value="${esc(b.st||'')}"></label>
@@ -806,9 +936,11 @@ $('btnFrame').onclick=()=>{if(blockSelected()){status('Click empty canvas to des
   S.frames.push(f);sel={t:'f',id};connect=false;pending=null;refresh(true);status('Frame added. Drag it over blocks, or drag its corner to resize.')};
 $('btnConnect').onclick=()=>{connect=!connect;pending=null;renderIBD()};
 // a deleted block leaves every analysis that used it
-function dropTargets(ids){for(const a of S.analyses){const mode=modeOf(a),k=kOf(a,'Targets',a.targets.length);a.targets=a.targets.filter(t=>!ids.has(t.id));if(mode!=='custom')setMode(a,mode,k)}}
+function dropTargets(ids){const prune=list=>list.filter(t=>t.kind||!ids.has(t.id)).map(t=>{if(t.kind==='gate')t.children=prune(t.children);return t});
+  for(const a of S.analyses){const mode=modeOf(a),k=kOf(a,'Targets',a.targets.length);a.targets=prune(a.targets);if(mode!=='custom')setMode(a,mode,k)}}
 function delSel(){if(!sel)return;
   if(sel.t==='b'){S.blocks=S.blocks.filter(b=>b.id!==sel.id);S.links=S.links.filter(l=>l.from!==sel.id&&l.to!==sel.id);dropTargets(new Set([sel.id]))}
+  else if(sel.t==='i'){removeItem(sel.uid);return}
   else if(sel.t==='f')S.frames=S.frames.filter(f=>f.id!==sel.id);
   else S.links=S.links.filter(l=>l.id!==sel.id);
   sel=null;refresh(true);}
@@ -920,6 +1052,7 @@ function groupsOf(){const g=new Map(),pr=repPrimary();if(!ccfOn())return g;for(c
 function alphasFor(g,m){let a=S.ccf[g];if(!Array.isArray(a)||a.length!==m){a=defAlpha(m);S.ccf[g]=a}return a}
 function model(){
   const ev={},ccfOf=new Map(),info={},be={},pr=repPrimary();
+  for(const a of S.analyses)walkItems(a.targets,t=>{if(t.kind==='event'||t.kind==='undev'){const k='x:'+t.uid;be['$'+t.uid]=k;ev[k]={name:t.label||'Untitled event',p:clamp(+t.p||0,0,1),undev:t.kind==='undev'}}});
   for(const b of S.blocks){if(isTop(b))continue;const k=evKey(b);be[b.id]=k;be['#'+b.id]=k;if(!ev[k]){const src=b.rep?pr.get(b.rep):b;ev[k]={name:src.name,p:pb(src)}}}
   for(const[g,mem]of groupsOf()){const n=mem.length;if(n<2||n>6){info[g]={n,skip:true};continue}
     const a=alphasFor(g,n),sum=a.reduce((s,x)=>s+(+x||0),0)||1,al=a.map(x=>(+x||0)/sum);
@@ -1070,26 +1203,32 @@ function buildTree(M,St){
   // Along a path, running into a block already on it counts as "not lost": that's the least fixed point, the same
   // answer the loop solver gives.
   function node(id,path){
-    const b=m[id];if(!b)return[null,Infinity];const top=b.kind==='top'||b.kind==='an',anal=b.kind==='an',inp=(ins.get(id)||[]).filter(l=>m[l.from]);
+    const b=m[id];if(!b)return[null,Infinity];if(b.kind==='ext')return[basic(M.be[id],b.name,{undev:b.undev}),Infinity];
+    const grp=b.kind==='grp',top=b.kind==='top'||b.kind==='an'||grp,anal=b.kind==='an',inp=(ins.get(id)||[]).filter(l=>m[l.from]);
     if(!inp.length&&!top)return[internal(b,b.name+' fails'),Infinity];
     if(path.has(id))return[null,path.get(id)];
     if(drawn.has(id))return[gate({k:'xfer',bid:id,label:b.name+' output lost'},()=>drawn.get(id).f),Infinity];
     const d=path.size,p2=new Map(path).set(id,d),items=[],groups=new Map();let low=Infinity;
     const sub=x=>{const[n,lo]=node(x,p2);low=Math.min(low,lo);return n};
-    for(const l of inp){if(!l.group){const n=sub(l.from);if(n)items.push({node:n,srcs:[l.from]})}
+    // remember which analysis item each input came from, so a click on its box in the tree can open that item
+    const itemOf=new Map();for(const l of inp)if(l.item)itemOf.set(l.from,l.item);
+    for(const l of inp){if(!l.group){const n=sub(l.from);if(n){if(l.item)n.itemUid=l.item;items.push({node:n,srcs:[l.from]})}}
       else{if(!groups.has(l.group))groups.set(l.group,[]);groups.get(l.group).push(l.from)}}
     for(const[g,mem]of groups){const n=mem.length,vk=voteK(id,g,n),op=vk>=n?'AND':vk===1?'OR':'VOTE',res=mem.map(sub);
+      res.forEach((nn,i)=>{if(nn&&itemOf.get(mem[i]))nn.itemUid=itemOf.get(mem[i])});
       const its=res.map((nn,i)=>nn&&{node:nn,srcs:[mem[i]]}).filter(Boolean);if(!its.length)continue;
-      const c=group(its,b,op,new Set()),what=top?'':' '+g;
+      const c=grp?its.map(i=>i.node):group(its,b,op,new Set()),what=top?'':' '+g;
       const gn=c.length===1&&(its.length===n||vk===1)?c[0]:gate({k:'gate',g:op,vk,vn:n,ch:c,
         label:op==='AND'?`All${what} ${top?'listed blocks':'sources'} lost`:op==='OR'?`Any${what} source lost`:`${vk} or more of ${n}${what} lost`},
         ()=>St.B.atleast(vk,res.map(nn=>nn?nn.f:0)));
       items.push({node:gn,srcs:mem})}
-    const ch=(top?[]:[internal(b,b.name+' internal failure')]).concat(group(items,b,'OR',new Set()));
+    // an event group is your own structure, so frames don't add boxes directly inside it
+    const ch=(top?[]:[internal(b,b.name+' internal failure')]).concat(grp?items.map(i=>i.node):group(items,b,'OR',new Set()));
     let n=gate({k:'gate',g:'OR',label:top?(b.name||'Top event'):b.name+' output lost',ch,bid:id,blk:!top,top:b.kind==='top',anal},fold('OR',ch));
     // an included analysis with a single cause takes over that cause's gate, like the top event does
-    if(anal&&ch.length===1&&ch[0].k==='gate'&&!ch[0].frame){const c=ch[0];Object.assign(n,{g:c.g,vk:c.vk,vn:c.vn,ch:c.ch,sub:c.label})}
+    if((anal||grp)&&ch.length===1&&ch[0].k==='gate'&&!ch[0].frame&&!ch[0].itemUid){const c=ch[0];Object.assign(n,{g:c.g,vk:c.vk,vn:c.vn,ch:c.ch,sub:c.label})}
     if(anal&&!n.ch.length)n=null;
+    if(grp&&n)n.grp=true;
     if(n&&low>=d)drawn.set(id,n);
     return[n,low>=d?Infinity:low]}
   let root=S.top?node(S.top,new Map())[0]:null;
@@ -1143,6 +1282,9 @@ function setZoom(z,cx,cy){const wr=$('ftWrap'),r=wr.getBoundingClientRect();cx=c
 function centreOn(tx,ty,z){setZoom(z);const wr=$('ftWrap'),r=wr.getBoundingClientRect(),o=treeOrigin();
   wr.scrollLeft+=o.x+tx*o.s-(r.left+wr.clientWidth/2);wr.scrollTop+=o.y+ty*o.s-(r.top+wr.clientHeight/2)}
 let pan=null,panMoved=false;
+// a box that stands for an analysis item opens that item in the editor under the canvas
+$('ft').addEventListener('click',e=>{if(panMoved){panMoved=false;return}const g=e.target.closest('[data-item]');if(!g)return;selectItem(g.dataset.item);
+  $('insp').scrollIntoView({behavior:'smooth',block:'nearest'})});
 (function wireZoom(){const wr=$('ftWrap');
   $('zIn').onclick=()=>setZoom((zoom.z??fitScale())*1.25);
   $('zOut').onclick=()=>setZoom((zoom.z??fitScale())/1.25);
@@ -1163,7 +1305,7 @@ function drawTree(spf,M,St){
   const{Wd,Hd}=layTree(root);let o='';
   (function dr(n){const x=ftX(n),y=ftY(n),bw=FT.NW-14,s=n.k==='basic'&&spf.has(n.id),z=n.k==='basic'&&!(n.p>0);
     const lines=n.lines,ty=y+(n.bh-lines.length*LINE)/2+10;
-    o+=`<g${z?' class="ft-zero"':''}><title>${esc(n.label)}${n.sub&&n.sub!==n.label?' ('+esc(n.sub)+')':''}${n.p!=null?' · P = '+fmt(n.p):''}${n.rep?` · repeated ${n.rep}× in this tree, counted once`:''}</title><rect class="ft-box${n.top?' top':''}${s?' spf':''}${n.frame&&!n.top?' frm':''}${n.anal?' an':''}" x="${x-bw/2}" y="${y}" width="${bw}" height="${n.bh}" rx="3"/>`;
+    o+=`<g class="${z?'ft-zero':''}${n.itemUid?' ft-item':''}${n.itemUid&&sel&&sel.t==='i'&&sel.uid===n.itemUid?' isel':''}"${n.itemUid?` data-item="${n.itemUid}"`:''}><title>${esc(n.label)}${n.sub&&n.sub!==n.label?' ('+esc(n.sub)+')':''}${n.p!=null?' · P = '+fmt(n.p):''}${n.rep?` · repeated ${n.rep}× in this tree, counted once`:''}</title><rect class="ft-box${n.top?' top':''}${s?' spf':''}${n.frame&&!n.top?' frm':''}${n.anal?' an':''}" x="${x-bw/2}" y="${y}" width="${bw}" height="${n.bh}" rx="3"/>`;
     lines.forEach((t,i)=>o+=`<text class="ft-txt${n.top?' b':''}" x="${x}" y="${ty+i*LINE}" text-anchor="middle">${esc(t)}</text>`);
     if(n.tid&&n.k==='gate')o+=`<text class="ft-tid" x="${x+bw/2}" y="${y-4}" text-anchor="end">${n.tid}<title>Transfer ${n.tid}: drawn in full here, and as △ ${n.tid} elsewhere</title></text>`;
     // a gate with a single input does nothing, so the box connects straight to that input with no gate symbol
@@ -1178,7 +1320,7 @@ function drawTree(spf,M,St){
       const yb=n.g!=='AND'?y0+20:y0+24,ym=n.ym;
       for(const c of n.ch){const xc=ftX(c);o+=`<path class="ft-wire" d="M${x},${yb} V${ym} H${xc} V${ftY(c)}"/>`;dr(c)}
     }else if(n.k==='basic'){
-      o+=`<circle class="ft-basic${n.ccf?' ccf':''}${s?' spf':''}${n.rep?' rep':''}" cx="${x}" cy="${y0+12}" r="12"/><text class="ft-p" x="${x}" y="${y0+40}" text-anchor="middle">${fmt(n.p)}</text>`+
+      o+=(n.undev?`<path class="ft-basic undev${s?' spf':''}${n.rep?' rep':''}" d="M${x},${y0} L${x+14},${y0+12} L${x},${y0+24} L${x-14},${y0+12}Z"/>`:`<circle class="ft-basic${n.ccf?' ccf':''}${s?' spf':''}${n.rep?' rep':''}" cx="${x}" cy="${y0+12}" r="12"/>`)+`<text class="ft-p" x="${x}" y="${y0+40}" text-anchor="middle">${fmt(n.p)}</text>`+
         (n.rep?`<text class="ft-rep" x="${x+16}" y="${y0+6}">R×${n.rep}</text>`:'')+`</g>`;
     }else{
       o+=`<path class="ft-xfer" d="M${x},${y0} L${x+14},${y0+24} L${x-14},${y0+24}Z"/><text class="ft-xtxt" x="${x}" y="${y0+40}" text-anchor="middle">${n.tid||''}<title>Transfer ${n.tid||''}: same branch as the box tagged ${n.tid||''}, drawn in full elsewhere</title></text></g>`;
@@ -1270,7 +1412,7 @@ async function ftPptx(){
       const yb=n.g!=='AND'?y0+20:y0+24,ym=n.ym;
       for(const c of n.ch){const xc=ftX(c);wire(x,yb,x,ym);wire(x,ym,xc,ym);wire(xc,ym,xc,ftY(c));dr(c)}
     }else if(n.k==='basic'){
-      slide.addShape(SH_.ellipse,{x:X(x-12),y:Y(y0),w:u(24),h:u(24),fill:{color:s?C.critSoft:C.white,transparency:tr},
+      slide.addShape(n.undev?SH_.diamond:SH_.ellipse,{x:X(x-(n.undev?14:12)),y:Y(y0),w:u(n.undev?28:24),h:u(24),fill:{color:s?C.critSoft:C.white,transparency:tr},
         line:{color:s?C.crit:n.ccf?C.flow:C.ink,width:stroke(n.rep?2.4:1.3),dashType:n.ccf?'dash':'solid',transparency:tr}});
       txt(fmt(n.p),x-40,y0+30,80,13,{fontSize:pt(10),color:C.muted,fontFace:'Courier New'});
       if(n.rep)txt('R×'+n.rep,x+15,y0-2,34,12,{fontSize:pt(9.5),bold:true,color:C.flow,align:'left',fontFace:'Courier New'});
@@ -1292,7 +1434,7 @@ function frameProbs(A){const out=new Map();if(!A.St)return out;const M=A.M,B=A.S
   const owners=new Map();for(const b of S.blocks){const k=M.be[b.id];if(!owners.has(k))owners.set(k,new Set());owners.get(k).add(b.id)}
   const evBlocks=e=>{if(owners.has(e))return owners.get(e);const r=new Set();if(e.startsWith('ccf:'))for(const k of e.split(':').slice(2).join(':').split(','))for(const id of owners.get(k)||[])r.add(id);return r};
   for(const f of S.frames){const mem=new Set(S.blocks.filter(b=>inFrame(f,b)).map(b=>b.id));if(!mem.size)continue;
-    const exits=[...mem].filter(id=>[...ins].some(([to,ls])=>to!==TOP&&!to.startsWith('@')&&!mem.has(to)&&ls.some(l=>l.from===id)));
+    const exits=[...mem].filter(id=>[...ins].some(([to,ls])=>to!==TOP&&!to.startsWith('@')&&!to.startsWith('%')&&!mem.has(to)&&ls.some(l=>l.from===id)));
     const outs=exits.length?exits:[...mem],fs=outs.map(id=>A.St.F(id));
     const f0=f.lost==='any'?fs.reduce((a,x)=>B.or(a,x),0):fs.reduce((a,x)=>B.and(a,x),1);
     const p=B.prob(f0,e=>[...evBlocks(e)].some(id=>mem.has(id))?M.ev[e].p:0);
@@ -1378,7 +1520,7 @@ function toSysML(){
   S.links.forEach((l,i)=>{const f=flowN[l.flow||'signal'];port[l.from].push(`port o${i+1} : P_${f};`);port[l.to].push(`port i${i+1} : ~P_${f};`)});
   L.push(`/* Generated by Fault Tree Workbench. Layout data for reloading: ft-layout:${b64e(JSON.stringify(S))} */`);
   L.push('package FTW_Model {','  private import ScalarValues::*;','');
-  L.push(`  doc /* Mission time ${S.T} h. Analyses: ${S.analyses.map(a=>`${a.name.replace(/\*\//g,'')} (${modeOf(a)} of ${a.targets.map(t=>byId()[t.id]?.name).join(', ')||'nothing yet'})`).join('; ')}. */`,'');
+  L.push(`  doc /* Mission time ${S.T} h. Analyses: ${S.analyses.map(a=>`${a.name.replace(/\*\//g,'')} (${modeOf(a)} of ${a.targets.map(itemName).join(', ')||'nothing yet'})`).join('; ')}. */`,'');
   for(const[f,n]of Object.entries(flowN)){L.push(`  item def ${n};   // flow: ${f}`,`  port def P_${n} { out item payload : ${n}; }`)}
   L.push('');
   for(const b of S.blocks){
@@ -1419,7 +1561,7 @@ function toOpenPSA(){
   }
   const top=T.root?ref(T.root).match(/name="([^"]+)"/)[1]:'none';
   const defs=[...evs].map(id=>`    <define-basic-event name="${ename(id)}">\n      <label>${x(M.ev[id].name)}</label>\n`+
-    (M.ev[id].ccf?`      <attributes><attribute name="ftw-ccf" value="true"/></attributes>\n`:'')+`      <float value="${M.ev[id].p}"/>\n    </define-basic-event>`);
+    (M.ev[id].ccf?`      <attributes><attribute name="ftw-ccf" value="true"/></attributes>\n`:M.ev[id].undev?`      <attributes><attribute name="ftw-undeveloped" value="true"/></attributes>\n`:'')+`      <float value="${M.ev[id].p}"/>\n    </define-basic-event>`);
   return`<?xml version="1.0" encoding="UTF-8"?>
 <!-- Generated by Fault Tree Workbench. Top gate: ${top}. Probabilities are per ${S.T} h mission (rates converted with P = 1 - exp(-lambda*T)); common-cause events use the alpha-factor model. Open in Fault Tree Editor.html to edit the tree. -->
 <opsa-mef>

@@ -204,9 +204,60 @@ An analysis names an undesired event and says which blocks must lose their outpu
 | **Showing** | The analysis whose results are shown, listed alphabetically. The fault tree exports follow it. |
 | **+ New analysis**, **Duplicate**, **Delete** | Manage analyses. There's always at least one. |
 | **Undesired event** | The label at the top of the fault tree. |
-| **It occurs when** | **any** of the listed items is lost, **all** of them are, or **at least k** of them are. |
+| **It occurs when** | **any** of the listed items occurs (OR), **all** of them do (AND), or **at least k** of them do. |
 | **Include** | A shortcut that sets every block in the list at once to **Everything** or **Own only**. It shows **a mix** when the rows differ. |
-| List of items | The blocks and analyses the event depends on, each with its own setting (below). Use **↑** and **↓** to reorder them; the order is the left-to-right order of the inputs under the top gate. Add them with **+ Add a block or analysis…**, or click **Pick on diagram** and tap blocks to add or remove them; they're outlined while you pick. Press **Done** or **Esc** to finish. |
+| Outline | The items beneath the top event, as an indented tree: blocks, other analyses, event groups, basic events and undeveloped events (see [Building the tree top-down](#building-the-tree-top-down)). Click an item's name to edit it in the editor under the canvas. **↑** **↓** reorder items within their group (the order is the left-to-right order in the tree), and **✕** removes one. |
+| **+ Add a block or analysis…**, **Pick on diagram** | Add blocks or other analyses. With Pick on diagram, tap blocks to add or remove them; they're outlined while you pick. Press **Done** or **Esc** to finish. |
+| **+ Event group**, **+ Basic event**, **+ Undeveloped** | Add the top-down items described below. |
+
+**Add to** sets where the panel's add buttons and **Pick on diagram** put new items:
+- **Top event** (the default), or any event group in the analysis, shown indented.
+- **Selecting or creating an item never changes it.** So after you create Event group 1, the next item still goes under the top event, beside it.
+- **To fill a group,** choose it in **Add to**, or select the group and use its own add buttons in the editor under the canvas.
+- **If the chosen group is removed,** Add to goes back to the top event.
+
+New groups are numbered automatically: Event group 1, Event group 2 and so on.
+
+### Building the tree top-down
+
+The outline is a fault tree you build yourself, from the top event down. It stays linked to the diagram, so block failure data on the canvas always flows into it.
+
+| Item | What it is | Drawn as |
+|---|---|---|
+| **Block** | A block on the diagram, set to **Everything** or **Own only**. | Its own gate, or a circle |
+| **Analysis** (▣) | Another analysis, with its own settings. | An orange-outlined event |
+| **Event group** (⬠) | An intermediate event you name, with its own gate: any, all or at least k of its causes. Groups can be nested to any depth. | A box and a gate |
+| **Basic event** (○) | A cause that isn't on the diagram, such as a software fault, operator error or RF interference, with its own probability per mission. | A circle |
+| **Undeveloped event** (◇) | A cause you estimate now and break down later. | A diamond |
+
+**Editing.** Click an item's name in the outline, or **its box in the fault tree**, to open it in the editor under the canvas.
+
+| Selected | What you can do |
+|---|---|
+| **Event group** | Rename it, choose its gate and k, reorder or remove its causes, and add blocks, analyses, groups and events directly inside it. |
+| **Basic or undeveloped event** | Rename it, set its probability, switch between basic and undeveloped, or **Develop into an event group** to break it down. |
+| **Block** | Choose Everything or Own only, **Develop one level**, or select the block on the diagram. |
+| **Analysis** | Show it, to edit its own tree. |
+
+Any item can be removed with **Remove from analysis** or the **Delete** key. Undo covers every change.
+
+**Develop one level.** On a block set to Everything, **Develop one level** replaces the block with an event group of its causes from the diagram:
+- the block's own failure;
+- each required input;
+- each redundancy group, as its own group with the right gate.
+
+The result is unchanged; it's the same logic, written out one level. You can then rename, regroup, delete or develop further. For example, developing the Flight Controller gives "Flight Ctrl output lost" = any of: Flight Ctrl (own only), PDB, ESC, "All IMU inputs lost" and "All GNSS inputs lost".
+
+**Example.** "Loss of nav solution" = **all** of:
+- "Computer unavailable" = any of: Flight Ctrl (own only), Software fault (basic event, 0.01);
+- "Attitude sources lost" = at least 2 of: IMU A (own only), IMU B (own only), Icing (undeveloped, 0.05).
+
+The tree reads exactly as written. The result, 5.0 × 10⁻⁸, matches the hand calculation.
+
+**Calculation.** Basic and undeveloped events join the same exact calculation as blocks:
+- each one is counted once, wherever it appears;
+- an event group with no causes never occurs;
+- frames don't add labels directly inside an event group, because the group is your own structure.
 
 ### Everything or own only, per block
 
@@ -253,6 +304,8 @@ The *Other analyses* section of **+ Add a block or analysis…** lists analyses 
   - **Basic events** are circles.
   - **Boxes** grow taller for long descriptions, and every box in a row matches the tallest.
   - **Blue boxes** are frame labels; **orange-outlined boxes** are included analyses.
+- **Click to edit:** boxes that stand for an item in your analysis (blocks, event groups, events) can be clicked to open that item in the editor.
+- **Undeveloped events** are drawn as diamonds (◇).
 - **No one-input gates.** A gate with a single input does nothing, so it isn't drawn: the box connects straight to that input. For example, an analysis on one block set to own only shows the undesired event directly above that block's failure.
 - **Transfers.** A branch that's needed in several places is drawn in full once and tagged **T1**, **T2**…. Every other place shows a △ with the same label. It's one event, counted once.
 - **Repeated basic events** have a heavier circle and an `R×n` tag.
@@ -510,7 +563,7 @@ Open the file in the [Fault Tree Editor](#fault-tree-editor), or check the resul
 | `analyses[].name` | string | The undesired event. |
 | `analyses[].mode` | `any`, `all` or `atleast` | How the items combine. |
 | `analyses[].vote` | object | `{"Targets": k}` for at least k. |
-| `analyses[].targets[]` | array | Items: `id` is a block id, or `"@"` + another analysis's id. `group` is `"Targets"` for all / at least k. `own` is `true` for own only. |
+| `analyses[].targets[]` | array | The items under the top event. Every item has a `uid`. A block item has `id` (block id) and `own`; an analysis item has `id` = `"@"` + its id. An event group has `kind: "gate"`, `label`, `mode` (`any`, `all`, `atleast`), `k` and `children` (more items). A basic or undeveloped event has `kind: "event"` or `"undev"`, `label` and `p`. Top-level items have `group` = `"Targets"` for all / at least k. |
 | `blocks[].name` / `st` | string | Name and stereotype. |
 | `blocks[].mode` / `v` | `rate` or `prob` / number | λ per hour, or probability 0–1. |
 | `blocks[].ccf` / `rep` | string | Common-cause group and shared failure event tag, or empty. |
